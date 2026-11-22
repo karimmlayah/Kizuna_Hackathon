@@ -779,7 +779,7 @@ export function BrandSplash({ onDone, fastLaunch = false }: BrandSplashProps) {
             {/* Badge Haute Technologie */}
             <View style={styles.techPill}>
               <View style={styles.techDot} />
-              <Text style={styles.techText}>AI PVGIS • META SAM ViT-B • IoT ESP32</Text>
+              <Text style={styles.techText}>ANALYSE SOLAIRE DE PRÉCISION • SUIVI EN TEMPS RÉEL</Text>
             </View>
           </Animated.View>
         </Animated.View>

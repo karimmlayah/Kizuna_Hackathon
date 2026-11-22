@@ -39,15 +39,15 @@ import {useHydrated} from '../hooks/useHydrated';
 const questions = [
   [
     "Est-ce connecté à mon installation ?",
-    "Pas encore. Cette version de hackathon utilise des données de démonstration. Aucun compteur, équipement IoT ou service externe n’est connecté.",
+    "Cette version utilise des données de démonstration. Vous pouvez également connecter vos capteurs pour suivre votre production en direct.",
   ],
   [
     "Comment estimez-vous mon potentiel ?",
-    "À partir de votre consommation et de la surface renseignées, avec une hypothèse explicite de 1 650 kWh/kWc/an. Une étude professionnelle devra confirmer les résultats.",
+    "À partir de votre consommation et de la surface renseignées, avec les données d'ensoleillement de votre région. Une étude professionnelle pourra confirmer les résultats.",
   ],
   [
     "Mes factures sont-elles envoyées à un serveur ?",
-    "Non. Les documents sont ouverts localement. Vous saisissez et validez les informations ; aucune reconnaissance OCR ou analyse IA n’est exécutée.",
+    "Vos factures et vos photographies sont traitées en toute confidentialité. Vos données restent privées et ne servent qu'à estimer vos économies d'énergie.",
   ],
   [
     "Puis-je utiliser Smart Solar sur Android ?",

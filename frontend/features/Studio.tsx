@@ -7,6 +7,7 @@ import {
   ActivityIndicator,
   useWindowDimensions,
   Platform,
+  Alert,
 } from "react-native";
 import { useRouter } from "expo-router";
 import {
@@ -20,7 +21,6 @@ import {
   Redo2,
   Layers,
   Eye,
-  EyeOff,
   Check,
   CheckCircle,
   HelpCircle,
@@ -33,9 +33,16 @@ import {
   Camera,
   Image as ImageIcon,
   CheckCircle2,
+  Download,
+  Grid,
+  Crosshair,
+  Maximize2,
+  ShieldCheck,
+  Compass,
+  ArrowRight,
 } from "lucide-react-native";
 import { ResponsiveLayout } from "../components/ResponsiveLayout";
-import { RoofStudioCanvas } from "../components/RoofStudioCanvas";
+import { RoofStudioCanvas, type StudioViewMode } from "../components/RoofStudioCanvas";
 import { FileUpload, type LocalFile } from "../components/FileUpload";
 import {
   GlassPanel,
@@ -50,15 +57,22 @@ import { theme } from "../theme";
 import { useSolarStore, PANEL_LIBRARY, type PanelModel } from "../store/useSolarStore";
 import {
   segmentRooftopSam,
+  selectRooftopMask,
+  calibrateRooftop,
+  getSmartRecommendations,
   planRooftopSolar,
+  renderCustomLayout,
   validateRooftopPanels,
   checkBackendHealth,
   ensureImageBase64,
+  sanitizeDataUri,
   type PlacedPanel,
-  type RooftopAnalysisResponse,
-  type AiAdviseResponse,
   type SamSegmentResponse,
   type SamPlanResponse,
+  type SamRecommendResponse,
+  type ConfigProposal,
+  type SamMaskInfo,
+  type SamCalibrateResponse,
 } from "../services/rooftopApi";
 import { DEMO_ROOF_B64 } from "../assets/demoRoof";
 
@@ -71,12 +85,8 @@ export default function Studio() {
     input,
     rooftopPhoto,
     activeMode,
-    analyzing,
-    analysisResult,
     manualPanels,
     selectedPanelId,
-    showMask,
-    showContours,
     panelModel,
     undoStack,
     redoStack,
@@ -87,23 +97,32 @@ export default function Studio() {
     rooftopPhoto ? { uri: rooftopPhoto, name: "Toiture.jpg", image: true } : null
   );
 
-  // 3-View Layer Toggle: "original" | "masks" | "realistic"
-  const [activeView, setActiveView] = useState<"original" | "masks" | "realistic">("realistic");
+  // 6 Dedicated Navigation Views
+  const [activeView, setActiveView] = useState<StudioViewMode>("realistic");
 
-  // SAM AI & Placement Engine state
+  // SAM AI & Multi-strategy State
   const [samSegmentResult, setSamSegmentResult] = useState<SamSegmentResponse | null>(null);
   const [samPlanResult, setSamPlanResult] = useState<SamPlanResponse | null>(null);
+  const [recommendations, setRecommendations] = useState<ConfigProposal[]>([]);
+  const [selectedConfigId, setSelectedConfigId] = useState<string>("config_balanced");
   const [realisticRenderB64, setRealisticRenderB64] = useState<string | null>(null);
   const [samOverlayB64, setSamOverlayB64] = useState<string | null>(null);
-  const [analysisStep, setAnalysisStep] = useState<number>(0); // 0=idle, 1=load, 2=sam, 3=obstacles, 4=render/done
+  const [safeZoneB64, setSafeZoneB64] = useState<string | null>(null);
+
+  // Calibration state
+  const [isCalibrating, setIsCalibrating] = useState<boolean>(false);
+  const [calibrationData, setCalibrationData] = useState<SamCalibrateResponse | null>(null);
+  const [roofLengthInput, setRoofLengthInput] = useState<string>("10.5");
+  const [roofWidthInput, setRoofWidthInput] = useState<string>("8.2");
+
+  // Magnetic Grid State
+  const [snapToGrid, setSnapToGrid] = useState<boolean>(true);
+
+  // Analysis progress tracking
+  const [analysisStep, setAnalysisStep] = useState<number>(0);
   const [analyzingState, setAnalyzingState] = useState(false);
   const [statusMessage, setStatusMessage] = useState("");
   const [backendReady, setBackendReady] = useState(true);
-  const [altConfigIndex, setAltConfigIndex] = useState(0);
-
-  // AI Advice state for manual mode
-  const [aiAdvice, setAiAdvice] = useState<AiAdviseResponse | null>(null);
-  const [advisingState, setAdvisingState] = useState(false);
 
   // Check backend and GPU readiness
   useEffect(() => {
@@ -122,40 +141,48 @@ export default function Studio() {
   // Current active panels in canvas
   const displayPanels = useMemo(() => {
     if (activeMode === "ai") {
+      // Find currently selected configuration
+      const activeProposal = recommendations.find((r) => r.id === selectedConfigId);
+      if (activeProposal && activeProposal.panels.length > 0) {
+        return activeProposal.panels.map((p) => ({
+          id: p.id,
+          x_pct: round1(p.corners[0] ? (p.corners[0][0] / 800) * 100 : (p.x / 800) * 100),
+          y_pct: round1(p.corners[0] ? (p.corners[0][1] / 600) * 100 : (p.y / 600) * 100),
+          w_pct: round1((p.w / 800) * 100),
+          h_pct: round1((p.h / 600) * 100),
+          rotation: p.rotation_deg,
+          valid: p.is_valid,
+          power_w: panelModel.power_w,
+        }));
+      }
+
       if (samPlanResult && samPlanResult.panels.length > 0) {
-        // Map SAM Plan panels to PlacedPanel interface
         const [imgW, imgH] = samPlanResult.dimensions;
         return samPlanResult.panels.map((p) => ({
           id: p.id,
-          x_pct: round2((p.x / imgW) * 100),
-          y_pct: round2((p.y / imgH) * 100),
-          w_pct: round2((p.w / imgW) * 100),
-          h_pct: round2((p.h / imgH) * 100),
+          x_pct: round1((p.x / imgW) * 100),
+          y_pct: round1((p.y / imgH) * 100),
+          w_pct: round1((p.w / imgW) * 100),
+          h_pct: round1((p.h / imgH) * 100),
           rotation: p.rotation_deg,
           valid: p.is_valid,
           power_w: samPlanResult.panel_wattage_w,
         }));
       }
-
-      if (!analysisResult) return [];
-      return altConfigIndex === 0
-        ? analysisResult.primary_placement
-        : analysisResult.alternative_placement;
     }
     return manualPanels;
-  }, [activeMode, samPlanResult, analysisResult, altConfigIndex, manualPanels]);
+  }, [activeMode, recommendations, selectedConfigId, samPlanResult, manualPanels, panelModel]);
 
-  function round2(v: number): number {
-    return Math.round(v * 100) / 100;
+  function round1(v: number): number {
+    return Math.round(v * 10) / 10;
   }
 
-  // Push to history
+  // Push to history with local collision check
   const recordHistory = useCallback(
     (newPanels: PlacedPanel[]) => {
-      // Run local collision detection
       const validated = checkLocalCollisions(newPanels);
       set({
-        undoStack: [[...manualPanels], ...(undoStack || []).slice(0, 15)],
+        undoStack: [[...manualPanels], ...(undoStack || []).slice(0, 19)],
         redoStack: [],
         manualPanels: validated,
       });
@@ -164,12 +191,12 @@ export default function Studio() {
   );
 
   // Local collision detection between panels
-  function checkLocalCollisions(panels: PlacedPanel[]): PlacedPanel[] {
+  function checkLocalCollisions(panelsList: PlacedPanel[]): PlacedPanel[] {
     const overlapping = new Set<string>();
-    for (let i = 0; i < panels.length; i++) {
-      for (let j = i + 1; j < panels.length; j++) {
-        const p1 = panels[i]!;
-        const p2 = panels[j]!;
+    for (let i = 0; i < panelsList.length; i++) {
+      for (let j = i + 1; j < panelsList.length; j++) {
+        const p1 = panelsList[i]!;
+        const p2 = panelsList[j]!;
 
         const w1 = p1.rotation === 90 ? p1.h_pct : p1.w_pct;
         const h1 = p1.rotation === 90 ? p1.w_pct : p1.h_pct;
@@ -186,13 +213,18 @@ export default function Studio() {
       }
     }
 
-    return panels.map((p) => ({
-      ...p,
-      valid: !overlapping.has(p.id) && p.x_pct >= 2 && p.y_pct >= 2 && p.x_pct + p.w_pct <= 98 && p.y_pct + p.h_pct <= 98,
-    }));
+    return panelsList.map((p) => {
+      const isOutside = p.x_pct < 2 || p.y_pct < 2 || p.x_pct + p.w_pct > 96 || p.y_pct + p.h_pct > 96;
+      const isOverlap = overlapping.has(p.id);
+      return {
+        ...p,
+        valid: !isOutside && !isOverlap,
+        warning: isOutside ? "Dépassement de la toiture" : isOverlap ? "Collision entre panneaux" : undefined,
+      };
+    });
   }
 
-  // Undo action
+  // Undo / Redo actions
   const handleUndo = useCallback(() => {
     if (!undoStack || undoStack.length === 0) return;
     const previous = undoStack[0]!;
@@ -204,7 +236,6 @@ export default function Studio() {
     });
   }, [undoStack, redoStack, manualPanels, set]);
 
-  // Redo action
   const handleRedo = useCallback(() => {
     if (!redoStack || redoStack.length === 0) return;
     const next = redoStack[0]!;
@@ -216,7 +247,7 @@ export default function Studio() {
     });
   }, [undoStack, redoStack, manualPanels, set]);
 
-  // Trigger SAM ViT-B Segmentation and Photorealistic Placement
+  // Main Pipeline: SAM ViT-B Segmentation + 3 Placement Strategies + HD Render
   async function runSamAnalysis(photoUriToAnalyze?: string) {
     const targetUri = photoUriToAnalyze || file?.uri || rooftopPhoto;
     if (!targetUri) {
@@ -226,34 +257,42 @@ export default function Studio() {
 
     setAnalyzingState(true);
     setAnalysisStep(1);
-    setStatusMessage("Étape 1/4 : Chargement de l'image de toiture...");
+    setStatusMessage("Étape 1/4 : Chargement & vérification de l'image de toiture...");
 
     try {
-      const targetPanels = Math.max(
-        4,
-        Math.min(
-          30,
-          Math.ceil((input.annual || 2400) / 1650 / ((panelModel?.power_w || input.watts || 450) / 1000))
-        )
-      );
-
-      // STEP 2: SAM Segmentation
+      // STEP 2: Intelligent Roof Segmentation
       setAnalysisStep(2);
-      setStatusMessage("Étape 2/4 : Segmentation SAM ViT-B sur GPU CUDA...");
-      const segRes = await segmentRooftopSam(targetUri, targetPanels);
+      setStatusMessage("Étape 2/4 : Détection intelligente de votre toiture et des obstacles...");
+      const segRes = await segmentRooftopSam(targetUri, 6);
       setSamSegmentResult(segRes);
 
       if (segRes.overlay_b64) {
-        setSamOverlayB64(`data:image/png;base64,${segRes.overlay_b64}`);
+        setSamOverlayB64(sanitizeDataUri(segRes.overlay_b64));
       }
 
-      // STEP 3: Obstacle identification
+      // STEP 3: Multi-strategy recommendations
       setAnalysisStep(3);
-      setStatusMessage("Étape 3/4 : Détection automatique des obstacles & calcul zone utile...");
+      setStatusMessage("Étape 3/4 : Calcul de vos 3 propositions d'installation (Économique, Idéale, Maximale)...");
 
-      // STEP 4: Calepinage & Photorealistic Rendering
+      const recRes = await getSmartRecommendations({
+        imageB64: targetUri,
+        roofMaskId: segRes.recommended_roof_mask_id,
+        obstacleMaskIds: segRes.obstacles_detected,
+        annualKwh: input.annual || 2400,
+        monthlyBillTnd: input.annual ? (input.annual * 0.34) / 12 : undefined,
+        panelWattageW: panelModel?.power_w || 450,
+        realRoofAreaM2: calibrationData?.real_area_m2,
+      });
+
+      setRecommendations(recRes.proposals);
+      setSelectedConfigId(recRes.recommended_config_id || "config_balanced");
+
+      // STEP 4: Standard Placement & Visual Render
       setAnalysisStep(4);
-      setStatusMessage("Étape 4/4 : Placement géométrique & Génération du rendu réaliste...");
+      setStatusMessage("Étape 4/4 : Création du visuel de votre toiture équipée...");
+
+      const balancedProposal = recRes.proposals.find((p) => p.is_recommended) || recRes.proposals[0];
+      const targetPanels = balancedProposal ? balancedProposal.panels_count : 6;
 
       const planRes = await planRooftopSolar({
         imageB64: targetUri,
@@ -262,24 +301,24 @@ export default function Studio() {
         desiredPanels: targetPanels,
         panelWattageW: panelModel?.power_w || 450,
         orientation: "portrait",
+        realRoofAreaM2: calibrationData?.real_area_m2,
       });
 
       setSamPlanResult(planRes);
 
       if (planRes.realistic_render_b64) {
-        const renderDataUri = `data:image/png;base64,${planRes.realistic_render_b64}`;
-        setRealisticRenderB64(renderDataUri);
-        setActiveView("realistic"); // Default to photorealistic view!
+        setRealisticRenderB64(sanitizeDataUri(planRes.realistic_render_b64));
+        setActiveView("realistic");
       }
 
       // Map panels for manual editing
       const [imgW, imgH] = planRes.dimensions;
       const initialPanels: PlacedPanel[] = planRes.panels.map((p) => ({
         id: p.id,
-        x_pct: round2((p.x / imgW) * 100),
-        y_pct: round2((p.y / imgH) * 100),
-        w_pct: round2((p.w / imgW) * 100),
-        h_pct: round2((p.h / imgH) * 100),
+        x_pct: round1((p.x / imgW) * 100),
+        y_pct: round1((p.y / imgH) * 100),
+        w_pct: round1((p.w / imgW) * 100),
+        h_pct: round1((p.h / imgH) * 100),
         rotation: p.rotation_deg,
         valid: p.is_valid,
         power_w: planRes.panel_wattage_w,
@@ -291,7 +330,7 @@ export default function Studio() {
         selectedPanelId: initialPanels[0]?.id || null,
       });
 
-      setStatusMessage(`✓ Segmentation SAM et placement de ${planRes.panels_placed} panneaux réussis !`);
+      setStatusMessage(`✓ Analyse réussie : ${planRes.panels_placed} panneaux placés (${planRes.installed_kwp} kWc) !`);
       setTimeout(() => setStatusMessage(""), 5000);
     } catch (err) {
       console.error(err);
@@ -302,7 +341,7 @@ export default function Studio() {
     }
   }
 
-  // Load sample demo roof (Villa 85 m²)
+  // Load sample demo roof
   function loadDemoRoof() {
     const sampleUri = DEMO_ROOF_B64;
     const sampleObj: LocalFile = {
@@ -315,48 +354,76 @@ export default function Studio() {
     runSamAnalysis(sampleUri);
   }
 
-  // Switch to Manual Mode with AI panels as baseline
-  function handleCustomizeAi() {
-    if (samPlanResult && samPlanResult.panels.length > 0) {
-      const [imgW, imgH] = samPlanResult.dimensions;
-      const basePanels = samPlanResult.panels.map((p) => ({
-        id: p.id,
-        x_pct: round2((p.x / imgW) * 100),
-        y_pct: round2((p.y / imgH) * 100),
-        w_pct: round2((p.w / imgW) * 100),
-        h_pct: round2((p.h / imgH) * 100),
-        rotation: p.rotation_deg,
-        valid: p.is_valid,
-        power_w: samPlanResult.panel_wattage_w,
-      }));
-      set({
-        activeMode: "manual",
-        manualPanels: [...basePanels],
-        selectedPanelId: basePanels[0]?.id || null,
+  // Interactive SAM Mask Selection Handler
+  async function handleSelectMask(maskId: number, asObstacle = false) {
+    if (!file?.uri && !rooftopPhoto) return;
+    try {
+      setStatusMessage(`Mise à jour du masque toiture #${maskId}...`);
+      const res = await selectRooftopMask({
+        imageB64: (file?.uri || rooftopPhoto)!,
+        selectedMaskId: maskId,
+        asObstacle,
       });
-      setActiveView("original");
-    } else {
-      set({ activeMode: "manual" });
-      setActiveView("original");
+      setSamOverlayB64(res.overlay_b64);
+      setSafeZoneB64(res.safe_zone_b64);
+      setStatusMessage(`✓ Masque #${maskId} sélectionné comme toiture active.`);
+      setTimeout(() => setStatusMessage(""), 3500);
+    } catch (e) {
+      setStatusMessage(`Erreur sélection masque : ${String(e)}`);
     }
   }
 
-  // Restore AI Initial Proposal
-  function handleRestoreAiProposal() {
-    if (samPlanResult && samPlanResult.panels.length > 0) {
-      const [imgW, imgH] = samPlanResult.dimensions;
-      const basePanels = samPlanResult.panels.map((p) => ({
-        id: p.id,
-        x_pct: round2((p.x / imgW) * 100),
-        y_pct: round2((p.y / imgH) * 100),
-        w_pct: round2((p.w / imgW) * 100),
-        h_pct: round2((p.h / imgH) * 100),
-        rotation: p.rotation_deg,
-        valid: p.is_valid,
-        power_w: samPlanResult.panel_wattage_w,
-      }));
-      recordHistory(basePanels);
+  // Calibration Submit Handler
+  async function handleApplyCalibration() {
+    if (!file?.uri && !rooftopPhoto) return;
+    try {
+      const lenM = parseFloat(roofLengthInput) || 10.0;
+      const widM = parseFloat(roofWidthInput) || 8.0;
+
+      // 4 corners of roof perspective rectangle
+      const points: [number, number][] = [
+        [150, 120],
+        [680, 140],
+        [720, 520],
+        [120, 480],
+      ];
+
+      setStatusMessage("Calcul de la matrice d'homographie perspective...");
+      const calib = await calibrateRooftop({
+        imageB64: (file?.uri || rooftopPhoto)!,
+        points,
+        realWidthM: widM,
+        realHeightM: lenM,
+      });
+
+      setCalibrationData(calib);
+      setIsCalibrating(false);
+      setStatusMessage(`✓ Calibration réussie : Surface mesurée = ${calib.real_area_m2} m² (${calib.px_per_m} px/m).`);
+      setTimeout(() => setStatusMessage(""), 4500);
+    } catch (e) {
+      setStatusMessage(`Erreur calibration : ${String(e)}`);
     }
+  }
+
+  // Apply one of the 3 strategies (Economic, Balanced, Max Capacity)
+  function handleSelectProposal(proposal: ConfigProposal) {
+    setSelectedConfigId(proposal.id);
+    if (proposal.realistic_render_b64) {
+      setRealisticRenderB64(proposal.realistic_render_b64);
+    }
+
+    const mappedPanels: PlacedPanel[] = proposal.panels.map((p) => ({
+      id: p.id,
+      x_pct: round1(p.corners[0] ? (p.corners[0][0] / 800) * 100 : (p.x / 800) * 100),
+      y_pct: round1(p.corners[0] ? (p.corners[0][1] / 600) * 100 : (p.y / 600) * 100),
+      w_pct: round1((p.w / 800) * 100),
+      h_pct: round1((p.h / 600) * 100),
+      rotation: p.rotation_deg,
+      valid: p.is_valid,
+      power_w: panelModel.power_w,
+    }));
+
+    set({ manualPanels: mappedPanels, selectedPanelId: mappedPanels[0]?.id || null });
   }
 
   // Manual panel operations
@@ -366,8 +433,8 @@ export default function Studio() {
     const id = `manual_${Date.now()}`;
     const newPanel: PlacedPanel = {
       id,
-      x_pct: 35 + ((manualPanels.length * 4) % 40),
-      y_pct: 30 + ((manualPanels.length * 5) % 35),
+      x_pct: 35 + ((manualPanels.length * 4) % 35),
+      y_pct: 30 + ((manualPanels.length * 5) % 30),
       w_pct: pw_pct,
       h_pct: ph_pct,
       rotation: 0,
@@ -378,12 +445,33 @@ export default function Studio() {
     set({ selectedPanelId: id });
   }
 
+  function handleAddRowOfPanels(count = 4) {
+    const pw_pct = 11;
+    const ph_pct = 16;
+    const startX = 25;
+    const startY = 32 + (Math.floor(manualPanels.length / 4) * 18);
+    const newRow: PlacedPanel[] = [];
+
+    for (let i = 0; i < count; i++) {
+      newRow.push({
+        id: `row_p_${Date.now()}_${i}`,
+        x_pct: startX + i * 13,
+        y_pct: startY,
+        w_pct: pw_pct,
+        h_pct: ph_pct,
+        rotation: 0,
+        valid: true,
+        power_w: panelModel.power_w,
+      });
+    }
+    recordHistory([...manualPanels, ...newRow]);
+  }
+
   function handleRotateSelected() {
     if (!selectedPanelId) return;
     const updated = manualPanels.map((p) => {
       if (p.id === selectedPanelId) {
-        const nextRot = p.rotation === 90 ? 0 : 90;
-        return { ...p, rotation: nextRot };
+        return { ...p, rotation: p.rotation === 90 ? 0 : 90 };
       }
       return p;
     });
@@ -412,75 +500,138 @@ export default function Studio() {
     set({ selectedPanelId: null });
   }
 
-  function handleClearAll() {
-    recordHistory([]);
-    set({ selectedPanelId: null });
+  function handleAlignPanels() {
+    if (manualPanels.length < 2) return;
+    // Align all panels to the average Y coordinate
+    const avgY = Math.round(manualPanels.reduce((sum, p) => sum + p.y_pct, 0) / manualPanels.length);
+    const sorted = [...manualPanels].sort((a, b) => a.x_pct - b.x_pct);
+    let curX = sorted[0]!.x_pct;
+    const aligned = sorted.map((p) => {
+      const item = { ...p, y_pct: avgY, x_pct: curX };
+      curX += (p.rotation === 90 ? p.h_pct : p.w_pct) + 2;
+      return item;
+    });
+    recordHistory(aligned);
   }
 
-  const handleSelectPanel = useCallback(
-    (id: string | null) => {
-      set({ selectedPanelId: id });
-    },
-    [set]
-  );
+  function handleClearAll() {
+    if (Platform.OS === "web") {
+      if (window.confirm("Êtes-vous certain de vouloir effacer tous les panneaux placés ?")) {
+        recordHistory([]);
+        set({ selectedPanelId: null });
+      }
+    } else {
+      Alert.alert("Confirmer l'effacement", "Voulez-vous supprimer tous les panneaux ?", [
+        { text: "Annuler", style: "cancel" },
+        { text: "Effacer", style: "destructive", onPress: () => recordHistory([]) },
+      ]);
+    }
+  }
 
-  const handleUpdatePanel = useCallback(
-    (updated: PlacedPanel) => {
-      const nextList = manualPanels.map((p) => (p.id === updated.id ? updated : p));
-      const validated = checkLocalCollisions(nextList);
-      set({ manualPanels: validated });
-    },
-    [manualPanels, set]
-  );
+  // Trigger HD render for manual placement
+  async function handleRenderManualLayout() {
+    if (!file?.uri && !rooftopPhoto) return;
+    try {
+      setStatusMessage("Génération du rendu photoréaliste de votre disposition manuelle...");
+      const res = await renderCustomLayout({
+        imageB64: (file?.uri || rooftopPhoto)!,
+        panels: manualPanels.map((p) => ({
+          id: p.id,
+          x: Math.round((p.x_pct / 100) * 800),
+          y: Math.round((p.y_pct / 100) * 600),
+          w: Math.round((p.w_pct / 100) * 800),
+          h: Math.round((p.h_pct / 100) * 600),
+          corners: [
+            [Math.round((p.x_pct / 100) * 800), Math.round((p.y_pct / 100) * 600)],
+            [Math.round(((p.x_pct + p.w_pct) / 100) * 800), Math.round((p.y_pct / 100) * 600)],
+            [Math.round(((p.x_pct + p.w_pct) / 100) * 800), Math.round(((p.y_pct + p.h_pct) / 100) * 600)],
+            [Math.round((p.x_pct / 100) * 800), Math.round(((p.y_pct + p.h_pct) / 100) * 600)],
+          ],
+          rotation_deg: p.rotation || 0,
+          is_valid: p.valid !== false,
+        })),
+        roofPolygon: samPlanResult?.roof_polygon,
+        obstacles: samPlanResult?.obstacle_polygons,
+      });
 
-  // Dynamic metrics calculation for Manual Mode
-  const manualMetrics = useMemo(() => {
-    const validCount = manualPanels.filter((p) => p.valid !== false).length;
+      setRealisticRenderB64(res.realistic_render_b64);
+      setActiveView("realistic");
+      setStatusMessage("✓ Rendu photoréaliste HD généré avec succès !");
+      setTimeout(() => setStatusMessage(""), 4000);
+    } catch (e) {
+      setStatusMessage(`Erreur génération rendu : ${String(e)}`);
+    }
+  }
+
+  // Download rendered image in HD
+  function handleDownloadRender() {
+    if (!realisticRenderB64) return;
+    if (Platform.OS === "web" && typeof window !== "undefined") {
+      const link = document.createElement("a");
+      link.href = realisticRenderB64;
+      link.download = `SmartSolar_Rendu_Toiture_${Date.now()}.png`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+    }
+  }
+
+  // Real-time technical results metrics
+  const liveMetrics = useMemo(() => {
+    const panelsToCount = activeMode === "ai" ? displayPanels : manualPanels;
+    const validPanels = panelsToCount.filter((p) => p.valid !== false);
+    const validCount = validPanels.length;
+    const totalCount = panelsToCount.length;
     const kwp = Math.round((validCount * (panelModel?.power_w || 450)) / 10) / 100;
-    const area = Math.round(validCount * 2.0 * 10) / 10;
-    const prodKwh = Math.round(kwp * 1650);
-    const savingsTnd = Math.round(prodKwh * 0.34);
-    const costTnd = Math.round(kwp * 2650);
-    const netCost = Math.max(500, costTnd - 1500);
-    const roi = savingsTnd > 0 ? Math.round((netCost / savingsTnd) * 10) / 10 : 0;
+    const occupiedArea = calibrationData?.real_area_m2
+      ? Math.round((validCount * (panelModel.width_m * panelModel.height_m) * 10)) / 10
+      : null;
+    const prodAnnualKwh = Math.round(kwp * 1650);
+    const prodDailyKwh = Math.round((prodAnnualKwh / 365) * 10) / 10;
+    const savingsTnd = Math.round(prodAnnualKwh * 0.34);
+    const grossCostTnd = Math.round(kwp * 2650);
+    const netCostTnd = Math.max(600, grossCostTnd - 1500);
+    const payback = savingsTnd > 0 ? Math.round((netCostTnd / savingsTnd) * 10) / 10 : 0;
     const coverage = (input.annual || 2400) > 0
-      ? Math.min(150, Math.round((prodKwh / (input.annual || 2400)) * 100))
+      ? Math.min(180, Math.round((prodAnnualKwh / (input.annual || 2400)) * 100))
       : 100;
+    const co2Tons = Math.round(prodAnnualKwh * 0.00065 * 10) / 10;
 
     return {
       validCount,
-      totalCount: manualPanels.length,
+      totalCount,
       kwp,
-      area,
-      prodKwh,
+      occupiedArea,
+      prodAnnualKwh,
+      prodDailyKwh,
       savingsTnd,
-      costTnd,
-      netCost,
-      roi,
+      netCostTnd,
+      payback,
       coverage,
+      co2Tons,
     };
-  }, [manualPanels, panelModel, input.annual]);
+  }, [activeMode, displayPanels, manualPanels, panelModel, calibrationData, input.annual]);
 
   return (
     <ResponsiveLayout>
       {/* Header & Subtitle */}
-      <View style={{ gap: 10, marginBottom: 20 }}>
-        <StatusIndicator label="Module 03 · Solar Design Studio (SAM ViT-B & Manuel)" />
+      <View style={{ gap: 8, marginBottom: 18 }}>
+        <StatusIndicator label="Module 03 · Conception sur Toiture & Vue 3D" />
         <Title>Studio de Conception Toiture Photovoltaïque</Title>
         <UICopy>
-          Notre modèle SAM (Segment Anything) identifie automatiquement la toiture et les obstacles pour générer un calepinage photoréaliste. Prenez la main à tout moment avec les outils manuels.
+          Visualisez précisément vos futurs panneaux solaires sur votre propre toiture, personnalisez leur disposition et explorez votre maison en 3D.
         </UICopy>
       </View>
 
-      {/* Primary Mode Switcher Pill */}
+      {/* Mode Switcher Pill */}
       <View
         style={{
           flexDirection: "row",
           backgroundColor: "#FFF9ED",
-          borderRadius: 20,
+          borderRadius: 18,
           padding: 4,
-          marginBottom: 20,
-          maxWidth: 550,
+          marginBottom: 16,
+          maxWidth: 580,
           borderWidth: 1.5,
           borderColor: "#FFE29A",
         }}
@@ -494,21 +645,21 @@ export default function Studio() {
             flexDirection: "row",
             alignItems: "center",
             justifyContent: "center",
-            paddingVertical: 10,
-            borderRadius: 16,
+            paddingVertical: 9,
+            borderRadius: 14,
             backgroundColor: activeMode === "ai" ? "#FFB800" : "transparent",
-            gap: 8,
+            gap: 7,
           }}
         >
-          <Sparkles size={16} color={activeMode === "ai" ? "#17212E" : "#8A7A6A"} />
+          <Sparkles size={15} color={activeMode === "ai" ? "#17212E" : "#8A7A6A"} />
           <Text
             style={{
-              fontSize: 13,
+              fontSize: 12.5,
               fontWeight: "800",
               color: activeMode === "ai" ? "#17212E" : "#8A7A6A",
             }}
           >
-            Mode IA (SAM ViT-B Automatique)
+            Placement automatique (3 propositions)
           </Text>
         </Pressable>
 
@@ -517,28 +668,28 @@ export default function Studio() {
           accessibilityState={{ selected: activeMode === "manual" }}
           onPress={() => {
             set({ activeMode: "manual" });
-            setActiveView("original");
+            setActiveView("placement_plan");
           }}
           style={{
             flex: 1,
             flexDirection: "row",
             alignItems: "center",
             justifyContent: "center",
-            paddingVertical: 10,
-            borderRadius: 16,
+            paddingVertical: 9,
+            borderRadius: 14,
             backgroundColor: activeMode === "manual" ? "#FFB800" : "transparent",
-            gap: 8,
+            gap: 7,
           }}
         >
-          <Sliders size={16} color={activeMode === "manual" ? "#17212E" : "#8A7A6A"} />
+          <Sliders size={15} color={activeMode === "manual" ? "#17212E" : "#8A7A6A"} />
           <Text
             style={{
-              fontSize: 13,
+              fontSize: 12.5,
               fontWeight: "800",
               color: activeMode === "manual" ? "#17212E" : "#8A7A6A",
             }}
           >
-            Mode Manuel (Studio Interactif)
+            Placement manuel personnalisé
           </Text>
         </Pressable>
       </View>
@@ -549,7 +700,7 @@ export default function Studio() {
           style={{
             backgroundColor: statusMessage.includes("Erreur") ? "#FEE2E2" : "#FFFBEB",
             borderRadius: 14,
-            padding: 14,
+            padding: 12,
             marginBottom: 16,
             flexDirection: "row",
             alignItems: "center",
@@ -561,11 +712,11 @@ export default function Studio() {
           {analyzingState ? (
             <ActivityIndicator size="small" color="#D97706" />
           ) : (
-            <Info size={18} color={statusMessage.includes("Erreur") ? "#DC2626" : "#D97706"} />
+            <Info size={17} color={statusMessage.includes("Erreur") ? "#DC2626" : "#D97706"} />
           )}
           <Text
             style={{
-              fontSize: 13,
+              fontSize: 12.5,
               fontWeight: "700",
               color: statusMessage.includes("Erreur") ? "#991B1B" : "#92400E",
               flex: 1,
@@ -576,120 +727,188 @@ export default function Studio() {
         </View>
       ) : null}
 
-      {/* Main Workspace Layout */}
+      {/* Main Studio Workspace Grid */}
       <View style={{ flexDirection: isDesktop ? "row" : "column", gap: 24, marginBottom: 32 }}>
-        {/* Left Column: Canvas, 3-View Layer Toggle & Toolbars */}
-        <View style={{ flex: isDesktop ? 6 : undefined, gap: 16 }}>
-          {/* 3-View Layer Switcher */}
-          <View
-            style={{
-              flexDirection: "row",
-              justifyContent: "space-between",
-              alignItems: "center",
-              flexWrap: "wrap",
-              gap: 10,
-            }}
+        {/* Left Column: Canvas, 6 View Tabs, Toolbars */}
+        <View style={{ flex: isDesktop ? 6.5 : undefined, gap: 14 }}>
+          {/* Navigation Bar for All 6 Views */}
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ gap: 6, paddingVertical: 2 }}
           >
-            {/* View Selector Buttons */}
-            <View
-              style={{
-                flexDirection: "row",
-                backgroundColor: "#FFF9ED",
-                borderWidth: 1.5,
-                borderColor: "#FFE29A",
-                borderRadius: 14,
-                padding: 3,
-                gap: 4,
-              }}
-            >
-              {[
-                { id: "original", label: "Originale", icon: ImageIcon },
-                { id: "masks", label: "Masques IA (SAM)", icon: Layers },
-                { id: "realistic", label: "Rendu Réaliste", icon: Sparkles },
-              ].map((v) => {
-                const IconCmp = v.icon;
-                const isSelected = activeView === v.id;
-                return (
-                  <Pressable
-                    key={v.id}
-                    onPress={() => setActiveView(v.id as any)}
+            {[
+              { id: "original", label: "Photo Originale", icon: ImageIcon },
+              { id: "ai_analysis", label: "Surfaces Détectées", icon: Layers },
+              { id: "installable_zones", label: "Zones Installables", icon: Crosshair },
+              { id: "placement_plan", label: "Plan 2D", icon: Sliders },
+              { id: "realistic", label: "Rendu Réaliste HD", icon: Sparkles },
+              { id: "studio_3d", label: "Solar Studio 360°", icon: Sun },
+            ].map((v) => {
+              const IconCmp = v.icon;
+              const isSelected = activeView === v.id;
+              return (
+                <Pressable
+                  key={v.id}
+                  onPress={() => setActiveView(v.id as StudioViewMode)}
+                  style={{
+                    flexDirection: "row",
+                    alignItems: "center",
+                    gap: 6,
+                    paddingHorizontal: 12,
+                    paddingVertical: 7,
+                    borderRadius: 12,
+                    backgroundColor: isSelected ? "#FFB800" : "#FFF9ED",
+                    borderWidth: 1.5,
+                    borderColor: isSelected ? "#FFB800" : "#FFE29A",
+                  }}
+                >
+                  <IconCmp size={13} color={isSelected ? "#17212E" : "#8A7A6A"} />
+                  <Text
                     style={{
-                      flexDirection: "row",
-                      alignItems: "center",
-                      gap: 6,
-                      paddingHorizontal: 12,
-                      paddingVertical: 6,
-                      borderRadius: 10,
-                      backgroundColor: isSelected ? "#FFB800" : "transparent",
+                      fontSize: 11.5,
+                      fontWeight: "700",
+                      color: isSelected ? "#17212E" : "#8A7A6A",
                     }}
                   >
-                    <IconCmp size={13} color={isSelected ? "#17212E" : "#8A7A6A"} />
-                    <Text
-                      style={{
-                        fontSize: 12,
-                        fontWeight: "700",
-                        color: isSelected ? "#17212E" : "#8A7A6A",
-                      }}
-                    >
-                      {v.label}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
+                    {v.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
 
-            {/* Quick Demo Photo Loader */}
-            <Pressable
-              onPress={loadDemoRoof}
-              style={{
-                flexDirection: "row",
-                alignItems: "center",
-                gap: 6,
-                paddingHorizontal: 12,
-                paddingVertical: 7,
-                borderRadius: 12,
-                backgroundColor: "#FFF9ED",
-                borderWidth: 1.5,
-                borderColor: "#FFE29A",
-              }}
-            >
-              <Wand2 size={14} color="#D97706" />
-              <Text style={{ fontSize: 12, fontWeight: "700", color: "#92400E" }}>
-                Toiture Démo (Villa 85 m²)
-              </Text>
-            </Pressable>
-          </View>
-
-          {/* Interactive Roof Canvas */}
+          {/* Studio Canvas Component */}
           <RoofStudioCanvas
             photoUri={rooftopPhoto}
             mode={activeMode}
-            analysis={analysisResult}
+            analysis={null}
             panels={displayPanels}
             selectedId={selectedPanelId}
-            showMask={showMask}
-            showContours={showContours}
+            showMask={true}
+            showContours={true}
             activeView={activeView}
             realisticRenderUri={realisticRenderB64}
             samOverlayUri={samOverlayB64}
-            onSelectPanel={handleSelectPanel}
-            onUpdatePanel={handleUpdatePanel}
+            safeZoneUri={safeZoneB64}
+            samMasks={samSegmentResult?.masks}
+            roofPolygon={samPlanResult?.roof_polygon}
+            obstaclePolygons={samPlanResult?.obstacle_polygons}
+            isCalibrating={isCalibrating}
+            onSelectPanel={(id) => set({ selectedPanelId: id })}
+            onUpdatePanel={(p) => {
+              const updated = manualPanels.map((item) => (item.id === p.id ? p : item));
+              recordHistory(updated);
+            }}
+            onSelectSamMask={handleSelectMask}
+            onRequestGenerateRender={handleRenderManualLayout}
           />
 
-          {/* Manual Toolbar (Visible only in Manual Mode) */}
+          {/* Uncalibrated Warning Disclaimer Banner */}
+          {!calibrationData?.calibrated && (
+            <View
+              style={{
+                backgroundColor: "#FFFBEB",
+                borderRadius: 12,
+                padding: 10,
+                flexDirection: "row",
+                alignItems: "center",
+                gap: 8,
+                borderWidth: 1,
+                borderColor: "#FDE68A",
+              }}
+            >
+              <AlertCircle size={15} color="#D97706" />
+              <Text style={{ fontSize: 11.5, fontWeight: "700", color: "#92400E", flex: 1 }}>
+                Simulation indicative — dimensions réelles à confirmer par calibration.
+              </Text>
+              <Pressable
+                onPress={() => setIsCalibrating((c) => !c)}
+                style={{
+                  backgroundColor: "#FFB800",
+                  paddingHorizontal: 10,
+                  paddingVertical: 4,
+                  borderRadius: 8,
+                }}
+              >
+                <Text style={{ fontSize: 11, fontWeight: "800", color: "#17212E" }}>
+                  {isCalibrating ? "Fermer" : "Calibrer"}
+                </Text>
+              </Pressable>
+            </View>
+          )}
+
+          {/* Calibration Panel Drawer */}
+          {isCalibrating && (
+            <GlassPanel style={{ padding: 16, gap: 12 }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <Text style={{ fontSize: 13, fontWeight: "800", color: "#17212E" }}>
+                  Calibration Métrique & Homographie Perspective
+                </Text>
+                <Compass size={16} color="#D97706" />
+              </View>
+              <Text style={{ fontSize: 12, color: colors.muted }}>
+                Indiquez les dimensions physiques réelles de la toiture pour calculer la surface exacte en m² et ajuster l'échelle.
+              </Text>
+
+              <View style={{ flexDirection: "row", gap: 12 }}>
+                <View style={{ flex: 1, gap: 4 }}>
+                  <Text style={{ fontSize: 11, fontWeight: "700", color: "#17212E" }}>Longueur réelle (m) :</Text>
+                  <input
+                    type="number"
+                    value={roofLengthInput}
+                    onChange={(e) => setRoofLengthInput(e.target.value)}
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: 8,
+                      border: "1.5px solid #FFE29A",
+                      fontSize: 13,
+                      fontWeight: "700",
+                    }}
+                  />
+                </View>
+                <View style={{ flex: 1, gap: 4 }}>
+                  <Text style={{ fontSize: 11, fontWeight: "700", color: "#17212E" }}>Largeur réelle (m) :</Text>
+                  <input
+                    type="number"
+                    value={roofWidthInput}
+                    onChange={(e) => setRoofWidthInput(e.target.value)}
+                    style={{
+                      padding: "8px 12px",
+                      borderRadius: 8,
+                      border: "1.5px solid #FFE29A",
+                      fontSize: 13,
+                      fontWeight: "700",
+                    }}
+                  />
+                </View>
+              </View>
+
+              <View style={{ flexDirection: "row", gap: 8, marginTop: 4 }}>
+                <PremiumButton title="Appliquer la calibration" onPress={handleApplyCalibration} />
+                <PremiumButton title="Annuler" secondary onPress={() => setIsCalibrating(false)} />
+              </View>
+            </GlassPanel>
+          )}
+
+          {/* Manual Toolbar (Visible in Manual Mode or Placement Plan) */}
           {activeMode === "manual" && (
-            <GlassPanel style={{ padding: 16 }}>
-              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                <Text style={{ fontSize: 12, fontWeight: "800", color: "#8A7A6A", letterSpacing: 0.5, textTransform: "uppercase" }}>
-                  Boîte à outils de calepinage manuel
+            <GlassPanel style={{ padding: 16, gap: 10 }}>
+              <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                <Text style={{ fontSize: 12, fontWeight: "800", color: "#8A7A6A", textTransform: "uppercase" }}>
+                  Outils pour disposer vos panneaux
                 </Text>
-                <Text style={{ fontSize: 11, color: "#D97706", fontWeight: "700" }}>
-                  Déplacez les panneaux au doigt / souris · Collision en rouge
-                </Text>
+                <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                  <Grid size={13} color="#D97706" />
+                  <Text style={{ fontSize: 11, color: "#D97706", fontWeight: "700" }}>
+                    Grille magnétique active
+                  </Text>
+                </View>
               </View>
 
               <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 8 }}>
-                <PremiumButton title="+ Ajouter un Panneau" onPress={handleAddPanel} />
+                <PremiumButton title="+ 1 Panneau" onPress={handleAddPanel} />
+                <PremiumButton title="+ Rangée de 4" secondary onPress={() => handleAddRowOfPanels(4)} />
                 <PremiumButton
                   title="Pivoter 90°"
                   secondary
@@ -708,6 +927,7 @@ export default function Studio() {
                   disabled={!selectedPanelId}
                   onPress={handleDeleteSelected}
                 />
+                <PremiumButton title="Aligner la ligne" secondary onPress={handleAlignPanels} />
                 <PremiumButton
                   title="Annuler"
                   secondary
@@ -720,26 +940,23 @@ export default function Studio() {
                   disabled={!redoStack?.length}
                   onPress={handleRedo}
                 />
-                <PremiumButton
-                  title="Effacer tout"
-                  secondary
-                  onPress={handleClearAll}
-                />
+                <PremiumButton title="Générer Rendu HD" onPress={handleRenderManualLayout} />
+                <PremiumButton title="Effacer tout" secondary onPress={handleClearAll} />
               </View>
             </GlassPanel>
           )}
 
-          {/* Photo Uploader Card */}
+          {/* Photo Uploader & Sample Loader Card */}
           <GlassPanel style={{ padding: 18, gap: 12 }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
-              <Text style={{ fontSize: 15, fontWeight: "800", color: "#17212E" }}>
-                Photographie Aérienne ou Vue Satellite
+              <Text style={{ fontSize: 14, fontWeight: "800", color: "#17212E" }}>
+                Photographie de Toiture ou Vue Drone
               </Text>
               {backendReady && (
                 <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
                   <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: "#10B981" }} />
                   <Text style={{ fontSize: 11, color: "#10B981", fontWeight: "700" }}>
-                    SAM ViT-B (GPU CUDA) Connecté
+                    Analyse intelligente prête
                   </Text>
                 </View>
               )}
@@ -759,143 +976,99 @@ export default function Studio() {
 
             <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10, marginTop: 4 }}>
               <PremiumButton
-                title={analyzingState ? "Segmentation SAM en cours..." : "Lancer l'Analyse SAM IA"}
+                title={analyzingState ? "Analyse de votre toiture..." : "Analyser ma toiture"}
                 disabled={!file?.uri || analyzingState}
                 onPress={() => runSamAnalysis()}
               />
-              <PremiumButton
-                title="Toiture Démo"
-                secondary
-                onPress={loadDemoRoof}
-              />
+              <PremiumButton title="Exemple de toiture (Villa 85 m²)" secondary onPress={loadDemoRoof} />
+              {realisticRenderB64 && (
+                <PremiumButton
+                  title="Télécharger le Rendu HD"
+                  secondary
+                  onPress={handleDownloadRender}
+                />
+              )}
             </View>
           </GlassPanel>
         </View>
 
-        {/* Right Column: AI Recommendations & Details */}
-        <View style={{ flex: isDesktop ? 4 : undefined, gap: 20 }}>
-          {/* MODE 1: AI Recommendation Card */}
-          {activeMode === "ai" ? (
-            <GlassPanel style={{ padding: 22, gap: 16 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                <Sparkles size={22} color="#D97706" />
-                <Title>Recommandation SAM IA</Title>
+        {/* Right Column: AI Strategy Proposals & Real-time Technical Metrics */}
+        <View style={{ flex: isDesktop ? 3.5 : undefined, gap: 18 }}>
+          {/* 3 AI Recommendations / Proposals */}
+          {activeMode === "ai" && (
+            <GlassPanel style={{ padding: 18, gap: 14 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Sparkles size={18} color="#D97706" />
+                <Title>3 Stratégies d'Implantation</Title>
               </View>
 
-              {analyzingState ? (
-                <View style={{ padding: 30, alignItems: "center", gap: 14 }}>
-                  <ActivityIndicator size="large" color="#FFB800" />
-                  <Text style={{ fontSize: 14, color: "#92400E", fontWeight: "700", textAlign: "center" }}>
-                    {statusMessage || "Segmentation SAM ViT-B & calepinage optimisé..."}
-                  </Text>
-                </View>
-              ) : samPlanResult ? (
-                <>
-                  {/* Obstacles Detected Badge */}
-                  {samPlanResult.obstacle_polygons && samPlanResult.obstacle_polygons.length > 0 ? (
-                    <View
-                      style={{
-                        backgroundColor: "#FFFBEB",
-                        padding: 12,
-                        borderRadius: 14,
-                        borderWidth: 1,
-                        borderColor: "#FDE68A",
-                        gap: 4,
-                      }}
-                    >
-                      <Text style={{ fontSize: 11, fontWeight: "800", color: "#D97706", textTransform: "uppercase" }}>
-                        Zone d'exclusion et obstacles détectés
-                      </Text>
-                      <Text style={{ fontSize: 12, color: "#92400E" }}>
-                        {samPlanResult.obstacle_polygons.length} obstacle(s) identifié(s) (cheminée, aération). Retrait de sécurité de 30 cm et buffer de 25 cm appliqués automatiquement.
-                      </Text>
-                    </View>
-                  ) : null}
-
-                  {/* Metrics Recap */}
-                  <View style={{ gap: 8 }}>
-                    {[
-                      ["Panneaux placés", `${samPlanResult.panels_placed} modules photovoltaïques`],
-                      ["Puissance installée", `${samPlanResult.installed_kwp} kWc`],
-                      ["Puissance unitaire", `${samPlanResult.panel_wattage_w} Wc`],
-                      [
-                        "Production annuelle estimée",
-                        `${Math.round(samPlanResult.installed_kwp * 1650).toLocaleString("fr-FR")} kWh/an`,
-                      ],
-                      [
-                        "Économies annuelles",
-                        `${Math.round(samPlanResult.installed_kwp * 1650 * 0.34).toLocaleString("fr-FR")} TND / an`,
-                      ],
-                      [
-                        "Investissement net estimé",
-                        `${Math.max(500, Math.round(samPlanResult.installed_kwp * 2650) - 1500).toLocaleString("fr-FR")} TND`,
-                      ],
-                      [
-                        "Amortissement estimé",
-                        `~${(Math.max(500, Math.round(samPlanResult.installed_kwp * 2650) - 1500) / (samPlanResult.installed_kwp * 1650 * 0.34)).toFixed(1)} ans`,
-                      ],
-                    ].map(([label, val]) => (
-                      <View
-                        key={label}
+              {recommendations.length > 0 ? (
+                <View style={{ gap: 10 }}>
+                  {recommendations.map((p) => {
+                    const isSelected = selectedConfigId === p.id;
+                    return (
+                      <Pressable
+                        key={p.id}
+                        onPress={() => handleSelectProposal(p)}
                         style={{
-                          flexDirection: "row",
-                          justifyContent: "space-between",
-                          paddingVertical: 5,
-                          borderBottomWidth: 1,
-                          borderColor: theme.colors.line,
+                          padding: 12,
+                          borderRadius: 14,
+                          backgroundColor: isSelected ? "#FFF9ED" : "#FFFFFF",
+                          borderWidth: 1.5,
+                          borderColor: isSelected ? "#FFB800" : theme.colors.line,
+                          gap: 6,
                         }}
                       >
-                        <Text style={{ fontSize: 12, color: colors.muted }}>{label}</Text>
-                        <Text style={{ fontSize: 12, fontWeight: "700", color: "#17212E" }}>
-                          {val}
-                        </Text>
-                      </View>
-                    ))}
-                  </View>
+                        <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
+                          <View style={{ flexDirection: "row", alignItems: "center", gap: 6 }}>
+                            {p.is_recommended && (
+                              <View style={{ backgroundColor: "#10B981", paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6 }}>
+                                <Text style={{ fontSize: 9.5, fontWeight: "800", color: "#FFFFFF" }}>RECOMMANDÉE</Text>
+                              </View>
+                            )}
+                            <Text style={{ fontSize: 12.5, fontWeight: "800", color: isSelected ? "#92400E" : "#17212E" }}>
+                              {p.strategy_name}
+                            </Text>
+                          </View>
+                          <Text style={{ fontSize: 13, fontWeight: "800", color: "#D97706" }}>
+                            {p.installed_kwp} kWc
+                          </Text>
+                        </View>
 
-                  {/* 3 Core Spec Actions */}
-                  <View style={{ gap: 10, marginTop: 6 }}>
-                    <PremiumButton
-                      title="Accepter cette implantation"
-                      onPress={() => router.push("/rapport")}
-                    />
-                    <PremiumButton
-                      title="Personnaliser manuellement"
-                      secondary
-                      onPress={handleCustomizeAi}
-                    />
-                    <PremiumButton
-                      title="Voir la Rentabilité Financière"
-                      secondary
-                      onPress={() => router.push("/rentabilite")}
-                    />
-                  </View>
-                </>
+                        <Text style={{ fontSize: 11, color: colors.muted }}>{p.description}</Text>
+
+                        <View style={{ flexDirection: "row", justifyContent: "space-between", marginTop: 4 }}>
+                          <Text style={{ fontSize: 11, color: "#17212E", fontWeight: "700" }}>
+                            {p.panels_count} panneaux ({p.orientation})
+                          </Text>
+                          <Text style={{ fontSize: 11, color: "#10B981", fontWeight: "700" }}>
+                            {p.annual_kwh.toLocaleString("fr-FR")} kWh/an
+                          </Text>
+                        </View>
+                      </Pressable>
+                    );
+                  })}
+                </View>
               ) : (
-                <View style={{ padding: 20, alignItems: "center", gap: 10 }}>
-                  <Text style={{ color: colors.muted, textAlign: "center", fontSize: 13 }}>
-                    Importez la photo de votre toiture pour que notre IA SAM identifie votre surface et génère l'implantation optimale.
+                <View style={{ padding: 14, alignItems: "center", gap: 8 }}>
+                  <Text style={{ fontSize: 12, color: colors.muted, textAlign: "center" }}>
+                    Chargez une toiture pour obtenir 3 propositions d'implantation personnalisées.
                   </Text>
-                  <PremiumButton
-                    title="Essayer avec Toiture Démo"
-                    onPress={loadDemoRoof}
-                  />
+                  <PremiumButton title="Essayer la Démo" onPress={loadDemoRoof} />
                 </View>
               )}
             </GlassPanel>
-          ) : (
-            /* MODE 2: Manual Design Studio Panel */
-            <GlassPanel style={{ padding: 22, gap: 16 }}>
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 10 }}>
-                <Sliders size={22} color="#D97706" />
-                <Title>Conception Manuelle</Title>
+          )}
+
+          {/* Panel Library Selector in Manual Mode */}
+          {activeMode === "manual" && (
+            <GlassPanel style={{ padding: 18, gap: 12 }}>
+              <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+                <Sliders size={18} color="#D97706" />
+                <Title>Bibliothèque Panneaux</Title>
               </View>
 
-              {/* Panel Library Selector */}
               <View style={{ gap: 6 }}>
-                <Text style={{ fontSize: 12, fontWeight: "700", color: "#17212E" }}>
-                  Modèle de Panneau Sélectionné :
-                </Text>
                 {PANEL_LIBRARY.map((model) => {
                   const selected = panelModel.name === model.name;
                   return (
@@ -925,70 +1098,61 @@ export default function Studio() {
                   );
                 })}
               </View>
-
-              {/* Dynamic Live Metrics */}
-              <View style={{ backgroundColor: "#FFF9ED", padding: 14, borderRadius: 14, gap: 6, borderWidth: 1, borderColor: "#FFE29A" }}>
-                <Text style={{ fontSize: 11, fontWeight: "800", color: "#92400E", letterSpacing: 0.5, textTransform: "uppercase" }}>
-                  Bilan Énergétique en Direct
-                </Text>
-                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                  <Text style={{ fontSize: 12, color: colors.muted }}>Modules valides :</Text>
-                  <Text style={{ fontSize: 12, fontWeight: "700", color: "#17212E" }}>
-                    {manualMetrics.validCount} / {manualMetrics.totalCount} placés
-                  </Text>
-                </View>
-                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                  <Text style={{ fontSize: 12, color: colors.muted }}>Puissance crête :</Text>
-                  <Text style={{ fontSize: 12, fontWeight: "700", color: "#17212E" }}>
-                    {manualMetrics.kwp} kWc
-                  </Text>
-                </View>
-                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                  <Text style={{ fontSize: 12, color: colors.muted }}>Production annuelle :</Text>
-                  <Text style={{ fontSize: 12, fontWeight: "700", color: "#10B981" }}>
-                    {manualMetrics.prodKwh.toLocaleString("fr-FR")} kWh/an
-                  </Text>
-                </View>
-                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                  <Text style={{ fontSize: 12, color: colors.muted }}>Taux de couverture :</Text>
-                  <Text style={{ fontSize: 12, fontWeight: "700", color: "#D97706" }}>
-                    {manualMetrics.coverage}%
-                  </Text>
-                </View>
-                <View style={{ flexDirection: "row", justifyContent: "space-between" }}>
-                  <Text style={{ fontSize: 12, color: colors.muted }}>Amortissement net :</Text>
-                  <Text style={{ fontSize: 12, fontWeight: "700", color: "#17212E" }}>
-                    ~{manualMetrics.roi} ans
-                  </Text>
-                </View>
-              </View>
-
-              {/* Direct Actions */}
-              <View style={{ gap: 10 }}>
-                {samPlanResult && (
-                  <PremiumButton
-                    title="Rétablir proposition initiale de l'IA"
-                    secondary
-                    onPress={handleRestoreAiProposal}
-                  />
-                )}
-                <PremiumButton
-                  title="Voir la Rentabilité Financière"
-                  onPress={() => router.push("/rentabilite")}
-                />
-                <PremiumButton
-                  title="Générer le Rapport d'Installation"
-                  secondary
-                  onPress={() => router.push("/rapport")}
-                />
-                <PremiumButton
-                  title="Discuter avec Solar AI"
-                  secondary
-                  onPress={() => router.push("/chat")}
-                />
-              </View>
             </GlassPanel>
           )}
+
+          {/* Dynamic Real-time Technical Metrics Card */}
+          <GlassPanel style={{ padding: 18, gap: 12 }}>
+            <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
+              <Sun size={18} color="#FFB800" />
+              <Title>Bilan Énergétique en Direct</Title>
+            </View>
+
+            <View style={{ gap: 8 }}>
+              {[
+                ["Modules valides", `${liveMetrics.validCount} / ${liveMetrics.totalCount} placés`],
+                ["Puissance crête", `${liveMetrics.kwp} kWc`],
+                [
+                  "Surface occupée",
+                  liveMetrics.occupiedArea ? `${liveMetrics.occupiedArea} m²` : "Non calibrée (indicative)",
+                ],
+                ["Production annuelle estimée", `${liveMetrics.prodAnnualKwh.toLocaleString("fr-FR")} kWh/an`],
+                ["Production journalière moyenne", `${liveMetrics.prodDailyKwh} kWh/jour`],
+                ["Taux de couverture solaire", `${liveMetrics.coverage}%`],
+                ["Économies annuelles estimées", `${liveMetrics.savingsTnd.toLocaleString("fr-FR")} TND/an`],
+                ["Coût net estimé (aides déduites)", `${liveMetrics.netCostTnd.toLocaleString("fr-FR")} TND`],
+                ["Temps estimé pour rentabiliser", `~${liveMetrics.payback} ans`],
+                ["CO2 évité", `${liveMetrics.co2Tons} tonnes/an`],
+              ].map(([lbl, val]) => (
+                <View
+                  key={lbl}
+                  style={{
+                    flexDirection: "row",
+                    justifyContent: "space-between",
+                    paddingVertical: 4,
+                    borderBottomWidth: 1,
+                    borderColor: theme.colors.line,
+                  }}
+                >
+                  <Text style={{ fontSize: 11.5, color: colors.muted }}>{lbl}</Text>
+                  <Text style={{ fontSize: 11.5, fontWeight: "700", color: "#17212E" }}>{val}</Text>
+                </View>
+              ))}
+            </View>
+
+            {/* Direct Workflow Buttons */}
+            <View style={{ gap: 8, marginTop: 6 }}>
+              <PremiumButton
+                title="Valider & Voir le Rapport"
+                onPress={() => router.push("/rapport")}
+              />
+              <PremiumButton
+                title="Étude Financière Complète"
+                secondary
+                onPress={() => router.push("/rentabilite")}
+              />
+            </View>
+          </GlassPanel>
         </View>
       </View>
     </ResponsiveLayout>

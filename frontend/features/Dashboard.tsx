@@ -546,49 +546,49 @@ export default function Dashboard() {
         />
       </View>
 
-      {/* 4 Modules Autonomes · Accès Direct Sans Ordre Imposé */}
+      {/* Modules Métier Autonomes */}
       <View style={{ marginBottom: 24, gap: 12 }}>
         <Text style={{ fontSize: 13, fontWeight: "800", color: "#8A7A6A", letterSpacing: 0.5, textTransform: "uppercase" }}>
-          Modules Métier Autonomes · Mode IA ou Manuel au Choix
+          Vos outils solaires · Automatiques ou personnalisés
         </Text>
         <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 14 }}>
           {[
             {
-              title: "Smart Monitoring IoT",
-              mode: "ESP32 Live & Prédiction",
-              desc: "Tension, courant, puissance & alertes dépassement",
+              title: "Suivi de votre énergie",
+              mode: "Mesures en direct",
+              desc: "Puissance produite, consommation et conseils d'économie",
               href: "/monitoring",
               icon: Activity,
               color: "#F59E0B",
             },
             {
-              title: "Analyse Facture",
-              mode: "Scan IA ou Manuel",
-              desc: "Consommation kWh, barèmes STEG & budget",
+              title: "Lecture de Facture",
+              mode: "Lecture automatique",
+              desc: "Consommation annuelle et montant de vos factures",
               href: "/analyse",
               icon: FileText,
               color: "#38BDF8",
             },
             {
-              title: "Dimensionnement",
-              mode: "PVGIS ou Direct",
-              desc: "Puissance crête kWc, orientation & rendement",
+              title: "Nombre de panneaux",
+              mode: "Calcul sur mesure",
+              desc: "Nombre de panneaux recommandé et production annuelle",
               href: "/dimensionnement",
               icon: SlidersHorizontal,
               color: "#FFB800",
             },
             {
-              title: "Solar Design Studio",
-              mode: "SAM ViT-B ou Studio",
-              desc: "Segmentation toiture, obstacles & rendu 3D",
+              title: "Conception sur Toiture",
+              mode: "Placement intelligent",
+              desc: "Disposition des panneaux et vue de votre toit en 3D",
               href: "/studio",
               icon: PanelsTopLeft,
               color: "#10B981",
             },
             {
-              title: "Rentabilité 25 Ans",
-              mode: "Prosol ou Personnalisé",
-              desc: "Amortissement, aides ANME & bénéfice net",
+              title: "Rentabilité & Économies",
+              mode: "Simulation financière",
+              desc: "Temps pour rentabiliser et économies sur 25 ans",
               href: "/rentabilite",
               icon: ChartNoAxesCombined,
               color: "#F59E0B",
@@ -740,7 +740,7 @@ export default function Dashboard() {
           </Text>
 
           <Text style={{ color: "#94A3B8", fontSize: 14, lineHeight: 22 }}>
-            Importez votre facture STEG et découvrez le dimensionnement optimal pour votre maison.
+            Importez votre facture d'électricité et découvrez l'installation idéale pour votre maison.
           </Text>
 
           <PremiumButton

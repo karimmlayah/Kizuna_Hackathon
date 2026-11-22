@@ -388,7 +388,7 @@ export default function Monitoring() {
                   backgroundColor: statusColor,
                 }}
               />
-              <Label>IOT LIVE ENERGY & TELEMETRY</Label>
+              <Label>SUIVI EN DIRECT DE VOTRE PRODUCTION</Label>
             </View>
             <Title>Smart Energy Monitoring</Title>
             <Copy>« Suivez votre énergie en temps réel »</Copy>
@@ -1455,7 +1455,7 @@ export default function Monitoring() {
             </Text>
           </View>
           <Text style={{ fontSize: 12, color: colors.muted }}>
-            Notre IA analyse directement les métriques temps réel de votre ESP32 DevKit V1 et vos prévisions :
+            Notre conseiller analyse directement vos données de production en direct et vos prévisions :
           </Text>
 
           <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 10 }}>
@@ -1563,7 +1563,7 @@ export default function Monitoring() {
               <Text style={{ fontSize: 13, fontWeight: "800", color: colors.midnight }}>
                 Solar Studio
               </Text>
-              <Text style={{ fontSize: 11, color: colors.muted }}>Visualiser en 3D & SAM</Text>
+              <Text style={{ fontSize: 11, color: colors.muted }}>Visualiser votre toiture en 3D</Text>
             </View>
             <ChevronRight size={18} color="#94A3B8" />
           </Pressable>
@@ -1585,7 +1585,7 @@ export default function Monitoring() {
           >
             <View style={{ gap: 2 }}>
               <Text style={{ fontSize: 13, fontWeight: "800", color: colors.midnight }}>
-                Rentabilité & ROI
+                Rentabilité & Économies
               </Text>
               <Text style={{ fontSize: 11, color: colors.muted }}>Économies en TND</Text>
             </View>

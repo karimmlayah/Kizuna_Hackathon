@@ -394,7 +394,7 @@ function FormattedMessageText({
             <View style={{ flexDirection: "row", alignItems: "center", gap: 8 }}>
               <Activity size={20} color="#F59E0B" strokeWidth={2.4} />
               <Text style={{ fontSize: 15, fontWeight: "800", color: "#FFFFFF" }}>
-                Télémétrie Live IoT & Alertes
+                Suivi en direct & Alertes
               </Text>
             </View>
             <View
@@ -839,8 +839,8 @@ export default function Chat() {
       .then(setStatus)
       .catch(() => {
         setStatus({
-          provider: "Google Gemini API",
-          model: "gemini-3-flash-preview",
+          provider: "Solar AI",
+          model: "Conseiller Intelligent",
           ready: false,
           api_key_configured: false,
         });
@@ -1049,7 +1049,7 @@ export default function Chat() {
               }}
             >
               <Text style={{ fontSize: 11, fontWeight: "700", color: "#92400E" }}>
-                {status?.model ? `${status.model} · ${status.provider}` : "Gemini 3 Flash · Google AI"}
+                {status?.model ? `${status.model} · ${status.provider}` : "Conseiller Intelligent · Solar AI"}
               </Text>
             </View>
           </View>
@@ -1539,7 +1539,7 @@ export default function Chat() {
           >
             <ActivityIndicator size="small" color="#0284C7" />
             <Text style={{ fontSize: 13, fontWeight: "700", color: "#0369A1" }}>
-              Transcription vocale en cours (Faster-Whisper / Gemini)...
+              Transcription vocale en direct en cours...
             </Text>
           </View>
         )}
@@ -1734,11 +1734,11 @@ export default function Chat() {
                   </View>
                 ) : voiceRecorder.isTranscribing ? (
                   <Text style={{ fontSize: 14, fontWeight: "700", color: "#0369A1", textAlign: "center" }}>
-                    Transcription vocale en cours (Faster-Whisper)...
+                    Transcription vocale en direct en cours...
                   </Text>
                 ) : loading ? (
                   <Text style={{ fontSize: 14, fontWeight: "700", color: "#D97706", textAlign: "center" }}>
-                    Solar AI analyse votre question avec les données IoT...
+                    Solar AI analyse votre question avec les données de vos capteurs...
                   </Text>
                 ) : (
                   <Text style={{ fontSize: 13, color: colors.muted, textAlign: "center", lineHeight: 18 }}>

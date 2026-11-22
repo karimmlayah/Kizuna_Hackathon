@@ -490,7 +490,7 @@ export function SolarOverviewCard({
           <View style={{ gap: 6 }}>
             <View style={{ flexDirection: "row", justifyContent: "space-between", alignItems: "center" }}>
               <Text style={{ fontSize: 11, fontWeight: "800", color: colors.midnight, letterSpacing: 1 }}>
-                CAPTEUR IOT LIVE
+                CAPTEUR EN DIRECT
               </Text>
               <View
                 style={{
@@ -505,7 +505,7 @@ export function SolarOverviewCard({
               {iotPowerW !== undefined ? `${iotPowerW.toFixed(3)} W` : "0.887 W"}
             </Text>
             <Text style={{ fontSize: 11, color: colors.muted }}>
-              ESP32 DevKit V1 (Mokxi micro-panneau)
+              Capteur connecté (micro-panneau solaire)
             </Text>
           </View>
 

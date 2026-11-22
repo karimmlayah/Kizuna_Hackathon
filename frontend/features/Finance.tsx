@@ -138,7 +138,7 @@ export function FinancialProjection() {
               color: mode === "smart" ? "#17212E" : "#8A7A6A",
             }}
           >
-            Mode Intelligent (STEG & Prosol)
+            Calcul avec aides et tarifs en vigueur
           </Text>
         </Pressable>
 
@@ -164,7 +164,7 @@ export function FinancialProjection() {
               color: mode === "manual" ? "#17212E" : "#8A7A6A",
             }}
           >
-            Mode Manuel (Coûts détaillés)
+            Simulation personnalisée
           </Text>
         </Pressable>
       </View>
@@ -272,7 +272,7 @@ export function FinancialProjection() {
           >
             <ShieldAlert size={20} color="#D97706" />
             <Text style={{ fontSize: 12, color: "#92400E", flex: 1, lineHeight: 16 }}>
-              <Text style={{ fontWeight: "700" }}>Rappel réglementaire officiel :</Text> Même avec une production couvrant 100% de vos besoins énergétiques, les redevances fixes de raccordement compteur STEG et taxes municipales restent légalement dues (~6 à 12 DT par facture bimestrielle).
+              <Text style={{ fontWeight: "700" }}>Rappel réglementaire officiel :</Text> Même avec une production couvrant 100% de vos besoins énergétiques, les redevances fixes de raccordement au réseau et taxes municipales restent légalement dues (~6 à 12 DT par facture bimestrielle).
             </Text>
           </View>
         </GlassPanel>
@@ -303,7 +303,7 @@ export function FinancialProjection() {
                   Subvention de 1 500 TND accordée
                 </Text>
                 <Text style={{ fontSize: 12, color: "#6A5E52" }}>
-                  Financement bancaire échelonné directement prélevé sur votre facture STEG (taux préférentiel sur 7 à 10 ans).
+                  Financement bancaire échelonné directement prélevé sur votre facture d'électricité (taux préférentiel sur 7 à 10 ans).
                 </Text>
               </View>
 
@@ -318,7 +318,7 @@ export function FinancialProjection() {
                 }}
               >
                 <Text style={{ fontSize: 11, fontWeight: "700", color: "#8A7A6A", textTransform: "uppercase" }}>
-                  Barème Tarifaire STEG
+                  Tarif d'électricité en vigueur
                 </Text>
                 <Text style={{ fontSize: 14, fontWeight: "800", color: "#17212E" }}>
                   Basse Tension Palier 4 (0,341 DT/kWh)
@@ -427,7 +427,7 @@ export default function Finance() {
         <StatusIndicator label="Module 04 · Rentabilité & Projection Financière 25 ans" />
         <Title>Un investissement rentable, transparent et durable.</Title>
         <Copy>
-          Calculez précisément vos économies avec les barèmes STEG et les subventions Prosol Élec, ou ajustez vos hypothèses financières manuellement.
+          Calculez précisément vos économies avec les tarifs officiels et les subventions Prosol Élec, ou ajustez vos hypothèses financières manuellement.
         </Copy>
       </View>
       <FinancialProjection />

@@ -42,7 +42,7 @@ export default function Bill() {
   const [kwh, setKwh] = useState(input.annual ? String(Math.round(input.annual / 6)) : "400");
   const [months, setMonths] = useState("2");
   const [amount, setAmount] = useState("92");
-  const [period, setPeriod] = useState("Bimestre en cours (STEG)");
+  const [period, setPeriod] = useState("Facture de 2 mois");
   const [subscription, setSubscription] = useState("Résidentiel basse tension");
   const [location, setLocation] = useState(input.location || "Tunis");
   const [budget, setBudget] = useState("4500");
@@ -92,7 +92,7 @@ export default function Bill() {
         <StatusIndicator label="Module 01 · Analyse & Données Énergétiques" />
         <Title>Votre facture, point de départ de votre autonomie.</Title>
         <Copy>
-          Choisissez votre méthode préférée : scannez votre facture STEG avec l'IA ou saisissez directement vos chiffres en toute autonomie.
+          Choisissez votre méthode : lecture automatique de votre facture ou saisie directe de vos chiffres.
         </Copy>
 
         {/* Segmented Mode Selector */}
@@ -130,7 +130,7 @@ export default function Bill() {
                 color: mode === "ai" ? "#17212E" : "#8A7A6A",
               }}
             >
-              Mode IA (Scan intelligent)
+              Lecture automatique
             </Text>
           </Pressable>
 
@@ -162,12 +162,12 @@ export default function Bill() {
         </View>
       </View>
 
-      {/* ────────────────── MODE IA ────────────────── */}
+      {/* ────────────────── MODE AUTOMATIQUE ────────────────── */}
       {mode === "ai" ? (
         <>
           <StepIndicator
             step={step}
-            labels={["Importation", "Traitement IA", "Validation"]}
+            labels={["Importation", "Lecture", "Validation"]}
           />
           <GlassPanel style={{ maxWidth: 850 }}>
             {step === 0 ? (
@@ -181,12 +181,12 @@ export default function Bill() {
                 />
                 <View style={[s.row, { flexWrap: "wrap", marginTop: 15, gap: 10 }]}>
                   <PremiumButton
-                    title="Analyser avec l'IA"
+                    title="Lire ma facture"
                     disabled={!file}
                     onPress={() => setStep(1)}
                   />
                   <PremiumButton
-                    title="Facture STEG Démo (400 kWh)"
+                    title="Exemple de facture (400 kWh)"
                     secondary
                     onPress={() => {
                       setDemo(true);
@@ -206,18 +206,18 @@ export default function Bill() {
               </>
             ) : step === 1 ? (
               <View style={{ padding: 30, gap: 20 }}>
-                <Title>Extraction intelligente en cours...</Title>
+                <Title>Lecture de votre facture en cours...</Title>
                 <LoadingSkeleton />
                 <Copy>
                   {demo
-                    ? "Chargement de la facture démo STEG (Metlaoui, 400 kWh bimestriel, 92 TND)."
-                    : "Analyse multimodale de votre facture STEG en cours..."}
+                    ? "Chargement de la facture d'exemple (400 kWh pour 2 mois, 92 TND)."
+                    : "Lecture automatique de votre facture en cours..."}
                 </Copy>
               </View>
             ) : (
               <>
                 <StatusIndicator
-                  label={demo ? "Facture démo chargée" : "Données extraites par l'IA"}
+                  label={demo ? "Facture d'exemple chargée" : "Données lues sur votre facture"}
                 />
                 <Title>Vérifiez et validez vos données</Title>
                 {file && <FileUpload file={file} onFile={setFile} />}
@@ -334,7 +334,7 @@ export default function Bill() {
               <View style={{ flexDirection: "row", gap: 8 }}>
                 {[
                   { label: "1 mois", val: "1" },
-                  { label: "2 mois (STEG)", val: "2" },
+                  { label: "Tous les 2 mois", val: "2" },
                   { label: "12 mois (an)", val: "12" },
                 ].map((item) => (
                   <Pressable
@@ -427,7 +427,7 @@ export default function Bill() {
               {annualKwh.toLocaleString("fr-FR")} kWh
             </Text>
             <Text style={{ fontSize: 13, color: "#6A5E52" }}>
-              Équivalent à {(annualKwh / 12).toFixed(1)} kWh/mois. Basé sur les tarifs basse tension STEG pour {location}.
+              Équivalent à {(annualKwh / 12).toFixed(1)} kWh/mois. Basé sur les tarifs résidentiels pour {location}.
             </Text>
           </View>
 

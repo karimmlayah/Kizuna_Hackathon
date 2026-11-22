@@ -61,6 +61,27 @@ class SamSelectMaskRequest(BaseModel):
     image_b64: str
     selected_mask_id: int
     as_obstacle: bool = False
+    point_prompt: Optional[list[int]] = None
+    edge_setback_m: float = 0.3
+
+class SamCalibrateRequest(BaseModel):
+    image_b64: str
+    points: list[list[int]]
+    real_width_m: Optional[float] = None
+    real_height_m: Optional[float] = None
+    ref_distance_m: Optional[float] = None
+    ref_points: Optional[list[list[int]]] = None
+
+class SamRecommendRequest(BaseModel):
+    image_b64: str
+    roof_mask_id: Optional[int] = None
+    obstacle_mask_ids: Optional[list[int]] = None
+    custom_roof_polygon: Optional[list[list[int]]] = None
+    annual_kwh: Optional[float] = 2400.0
+    monthly_bill_tnd: Optional[float] = None
+    max_budget_tnd: Optional[float] = None
+    panel_wattage_w: int = 450
+    real_roof_area_m2: Optional[float] = None
 
 class SamPlanRequest(BaseModel):
     image_b64: str
@@ -76,13 +97,24 @@ class SamPlanRequest(BaseModel):
     spacing_m: float = 0.15
     real_roof_area_m2: Optional[float] = None
     orientation: Optional[str] = "portrait"
+    sun_azimuth_deg: float = 180.0
+    sun_elevation_deg: float = 45.0
 
 class SamValidateRequest(BaseModel):
-    image_width: int
-    image_height: int
+    image_width: Optional[int] = None
+    image_height: Optional[int] = None
+    dimensions: Optional[list[int]] = None
     roof_polygon: list[list[int]]
     obstacle_polygons: Optional[list[list[list[int]]]] = None
     panels: list[dict]
+
+class SamRenderRequest(BaseModel):
+    image_b64: str
+    panels: list[dict]
+    roof_polygon: Optional[list[list[int]]] = None
+    obstacles: Optional[list[list[list[int]]]] = None
+    sun_azimuth_deg: float = 180.0
+    sun_elevation_deg: float = 45.0
 
 class SolarSizingRequest(BaseModel):
     annual_kwh: float
@@ -136,6 +168,23 @@ async def health_check():
         "sam_ai": sam_status,
         "unet_model": unet_status
     }
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Session Image Streaming Proxy
+# ─────────────────────────────────────────────────────────────────────────────
+@router.get("/roof/result/{session_id}")
+@router.get("/api/rooftop/result/{session_id}")
+async def get_result_image(session_id: str):
+    """Retrieve rendered image directly from SAM session store."""
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.get(f"{SAM_MICROSERVICE_URL}/roof/result/{session_id}")
+            if resp.status_code == 200:
+                return Response(content=resp.content, media_type=resp.headers.get("content-type", "image/png"))
+            raise HTTPException(resp.status_code, "Image non trouvée")
+    except httpx.RequestError as e:
+        raise HTTPException(503, f"SAM microservice inaccessible : {e}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -198,14 +247,63 @@ async def segment_endpoint(req: SamSegmentRequest):
 @router.post("/api/rooftop/select-mask")
 async def select_mask_endpoint(req: SamSelectMaskRequest):
     """Interactive mask selection / toggle obstacle flag."""
+    req_dict = req.model_dump()
+    if req_dict.get("image_b64"):
+        b64 = req_dict["image_b64"]
+        if "," in b64:
+            b64 = b64.split(",")[1]
+        req_dict["image_b64"] = b64.strip()
+
     try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(f"{SAM_MICROSERVICE_URL}/roof/select-mask", json=req.model_dump())
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(f"{SAM_MICROSERVICE_URL}/roof/select-mask", json=req_dict)
             if resp.status_code == 200:
                 return resp.json()
             raise HTTPException(resp.status_code, resp.text)
     except httpx.RequestError as e:
         raise HTTPException(503, f"SAM service non joignable: {e}")
+
+
+@router.post("/roof/calibrate")
+@router.post("/api/rooftop/calibrate")
+async def calibrate_endpoint(req: SamCalibrateRequest):
+    """Calibration métrique par homographie perspective OpenCV."""
+    req_dict = req.model_dump()
+    if req_dict.get("image_b64"):
+        b64 = req_dict["image_b64"]
+        if "," in b64:
+            b64 = b64.split(",")[1]
+        req_dict["image_b64"] = b64.strip()
+
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(f"{SAM_MICROSERVICE_URL}/roof/calibrate", json=req_dict)
+            if resp.status_code == 200:
+                return resp.json()
+            raise HTTPException(resp.status_code, resp.text)
+    except httpx.RequestError as e:
+        raise HTTPException(503, f"SAM calibration non joignable: {e}")
+
+
+@router.post("/roof/recommend")
+@router.post("/api/rooftop/recommend")
+async def recommend_endpoint(req: SamRecommendRequest):
+    """Génération de 3 propositions intelligentes (Économique, Équilibrée, Capacité Max)."""
+    req_dict = req.model_dump()
+    if req_dict.get("image_b64"):
+        b64 = req_dict["image_b64"]
+        if "," in b64:
+            b64 = b64.split(",")[1]
+        req_dict["image_b64"] = b64.strip()
+
+    try:
+        async with httpx.AsyncClient(timeout=45.0) as client:
+            resp = await client.post(f"{SAM_MICROSERVICE_URL}/roof/recommend", json=req_dict)
+            if resp.status_code == 200:
+                return resp.json()
+            raise HTTPException(resp.status_code, resp.text)
+    except httpx.RequestError as e:
+        raise HTTPException(503, f"SAM engine non joignable: {e}")
 
 
 @router.post("/roof/plan")
@@ -231,13 +329,41 @@ async def plan_endpoint(req: SamPlanRequest):
         raise HTTPException(503, f"SAM placement engine non joignable: {e}")
 
 
+@router.post("/roof/render")
+@router.post("/api/rooftop/render")
+async def render_endpoint(req: SamRenderRequest):
+    """Rendu photoréaliste dynamique des panneaux personnalisés."""
+    req_dict = req.model_dump()
+    if req_dict.get("image_b64"):
+        b64 = req_dict["image_b64"]
+        if "," in b64:
+            b64 = b64.split(",")[1]
+        req_dict["image_b64"] = b64.strip()
+
+    try:
+        async with httpx.AsyncClient(timeout=30.0) as client:
+            resp = await client.post(f"{SAM_MICROSERVICE_URL}/roof/render", json=req_dict)
+            if resp.status_code == 200:
+                return resp.json()
+            raise HTTPException(resp.status_code, resp.text)
+    except httpx.RequestError as e:
+        raise HTTPException(503, f"SAM render engine non joignable: {e}")
+
+
 @router.post("/roof/validate")
 @router.post("/api/rooftop/validate")
 async def validate_endpoint(req: SamValidateRequest):
     """Valide les contraintes physiques des panneaux placés manuellement."""
+    req_dict = req.model_dump()
+    # Normalize dimensions format
+    if not req_dict.get("dimensions") and req_dict.get("image_width") and req_dict.get("image_height"):
+        req_dict["dimensions"] = [req_dict["image_width"], req_dict["image_height"]]
+    elif not req_dict.get("dimensions"):
+        req_dict["dimensions"] = [800, 600]
+
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(f"{SAM_MICROSERVICE_URL}/roof/validate", json=req.model_dump())
+            resp = await client.post(f"{SAM_MICROSERVICE_URL}/roof/validate", json=req_dict)
             if resp.status_code == 200:
                 return resp.json()
             raise HTTPException(resp.status_code, resp.text)

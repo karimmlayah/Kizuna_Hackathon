@@ -98,7 +98,7 @@ export default function Sizing() {
         <StatusIndicator label="Module 02 · Dimensionnement Solaire Intelligent" />
         <Title>Le potentiel solaire exact de votre toiture.</Title>
         <Copy>
-          Optimisez votre puissance installée avec notre algorithme basé sur le cadastre solaire PVGIS ou ajustez manuellement chaque paramètre physique.
+          Déterminez le nombre idéal de panneaux selon l'ensoleillement de votre région, ou personnalisez directement vos paramètres.
         </Copy>
 
         {/* Segmented Mode Selector */}
@@ -136,7 +136,7 @@ export default function Sizing() {
                 color: mode === "smart" ? "#17212E" : "#8A7A6A",
               }}
             >
-              Mode Intelligent (PVGIS & Optimisé)
+              Recommandation automatique
             </Text>
           </Pressable>
 
@@ -162,7 +162,7 @@ export default function Sizing() {
                 color: mode === "manual" ? "#17212E" : "#8A7A6A",
               }}
             >
-              Mode Manuel (Direct)
+              Mode Manuel (Personnalisé)
             </Text>
           </Pressable>
         </View>
@@ -219,10 +219,10 @@ export default function Sizing() {
                 }}
               >
                 <Text style={{ fontSize: 11, fontWeight: "700", color: "#8A7A6A", textTransform: "uppercase" }}>
-                  Source Cadastre Solaire
+                  Ensoleillement Régional
                 </Text>
                 <Text style={{ fontSize: 13, fontWeight: "800", color: "#17212E" }}>
-                  {backendSizing?.yield_source || "PVGIS-5 / ANME Tunisie"}
+                  Données d'ensoleillement officielles
                 </Text>
                 <Text style={{ fontSize: 12, color: "#6A5E52" }}>
                   Rendement spécifique : {specificYield} kWh/kWc/an à inclinaison optimale (~31°).

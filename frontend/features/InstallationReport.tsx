@@ -85,10 +85,10 @@ export default function InstallationReport() {
             Retour au Solar Design Studio
           </Text>
         </Pressable>
-        <StatusIndicator label="Rapport Officiel de Dimensionnement & Calepinage" />
+        <StatusIndicator label="Rapport Officiel de Dimensionnement & Implantation" />
         <Title>Étude d'Implantation Photovoltaïque</Title>
         <Copy>
-          Synthèse détaillée de votre projet solaire basée sur l'analyse de toiture U-Net et votre configuration personnalisée.
+          Synthèse détaillée de votre projet solaire basée sur l'analyse de votre toiture et votre configuration personnalisée.
         </Copy>
       </View>
 
@@ -181,7 +181,7 @@ export default function InstallationReport() {
       <GlassPanel style={{ marginBottom: 24, gap: 16 }}>
         <Title>Implantation sur la Toiture</Title>
         <Copy>
-          Calepinage validé avec respect des marges périphériques et des espacements de ventilation inter-modules.
+          Disposition validée avec respect des marges périphériques et des espacements de ventilation inter-modules.
         </Copy>
 
         <View
@@ -283,20 +283,20 @@ export default function InstallationReport() {
           <Title>Recommandations & Hypothèses de l'Étude</Title>
         </View>
         <Copy>
-          • <strong>Audit structurel préalable :</strong> L'analyse par vision par ordinateur U-Net estime la surface géométrique exploitable. Un audit physique sur site par un installateur agréé est impératif pour vérifier la portance de la charpente et l'étanchéité de la dalle.
+          • <strong>Audit structurel préalable :</strong> L'analyse numérique intelligente estime la surface géométrique exploitable. Un audit physique sur site par un installateur agréé est impératif pour vérifier la portance de la charpente et l'étanchéité de la dalle.
         </Copy>
         <Copy>
           • <strong>Ombrages et masques lointains :</strong> Les calculs de production considèrent une irradiation moyenne tunisienne de 1 650 kWh/kWc/an. Les ombrages d'arbres avoisinants ou de constructions futures peuvent impacter le rendement réel.
         </Copy>
         <Copy>
-          • <strong>Raccordement réseau :</strong> Cette simulation financière est calculée sur la base d'un tarif résidentiel moyen de 0,35 TND/kWh en autoconsommation totale sans vente de surplus à la STEG.
+          • <strong>Raccordement réseau :</strong> Cette simulation financière est calculée sur la base d'un tarif résidentiel moyen de 0,35 TND/kWh en autoconsommation totale pour votre propre consommation d'énergie.
         </Copy>
       </GlassPanel>
 
       {/* Navigation Buttons */}
       <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 14, marginBottom: 40 }}>
         <PremiumButton
-          title="Modifier le Calepinage au Studio"
+          title="Modifier la disposition au Studio"
           secondary
           onPress={() => router.push("/studio")}
         />

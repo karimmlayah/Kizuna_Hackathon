@@ -26,7 +26,7 @@ export async function ensureImageBase64(imageInput: string): Promise<string> {
 
   // 1. If it's already a Data URL (data:image/...;base64,...)
   if (imageInput.startsWith("data:")) {
-    const comma = imageInput.indexOf(",");
+    const comma = imageInput.lastIndexOf(",");
     return comma !== -1 ? imageInput.slice(comma + 1).trim() : imageInput.trim();
   }
 
@@ -43,7 +43,7 @@ export async function ensureImageBase64(imageInput: string): Promise<string> {
         const reader = new FileReader();
         reader.onloadend = () => {
           const res = reader.result as string;
-          const comma = res.indexOf(",");
+          const comma = res.lastIndexOf(",");
           resolve(comma !== -1 ? res.slice(comma + 1).trim() : res.trim());
         };
         reader.onerror = () => reject(new Error("Impossible de lire l'image en base64."));
@@ -67,11 +67,35 @@ export async function ensureImageBase64(imageInput: string): Promise<string> {
   }
 
   // 4. Default fallback: strip comma if present
-  return imageInput.includes(",") ? imageInput.split(",")[1]!.trim() : imageInput.trim();
+  return imageInput.includes(",") ? imageInput.split(",").pop()!.trim() : imageInput.trim();
+}
+
+/**
+ * Sanitizes any data URI, stripping accidental double prefixes like:
+ * "data:image/png;base64,data:image/png;base64,..."
+ */
+export function sanitizeDataUri(input: string | null | undefined, mime = "image/png"): string | null {
+  if (!input) return null;
+  const str = input.trim();
+  if (!str) return null;
+
+  // If it's a web/network URL or blob URL, return as is
+  if (str.startsWith("http://") || str.startsWith("https://") || str.startsWith("blob:") || str.startsWith("file://")) {
+    return str;
+  }
+
+  // If it contains data: prefix(es), extract the raw base64 after the last comma
+  if (str.includes(",")) {
+    const raw = str.split(",").pop()!.trim();
+    return `data:${mime};base64,${raw}`;
+  }
+
+  // Otherwise, it's bare base64
+  return `data:${mime};base64,${str}`;
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
-// Legacy & Common Types
+// Data Types
 // ─────────────────────────────────────────────────────────────────────────────
 export interface RooftopMetrics {
   total_roof_area_m2: number;
@@ -102,6 +126,7 @@ export interface PlacedPanel {
   rotation?: number;
   valid?: boolean;
   power_w?: number;
+  warning?: string;
 }
 
 export interface RooftopContourPoint {
@@ -143,11 +168,8 @@ export interface AiAdviseResponse {
   suggestions: AiSuggestion[];
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Meta SAM ViT-B & Placement Engine Types
-// ─────────────────────────────────────────────────────────────────────────────
 export interface SamMaskInfo {
-  id: intId;
+  id: number;
   area: number;
   area_pct: number;
   bbox: [number, number, number, number];
@@ -157,7 +179,6 @@ export interface SamMaskInfo {
   is_obstacle: boolean;
   polygon: [number, number][];
 }
-type intId = number;
 
 export interface SamSegmentResponse {
   status: string;
@@ -169,7 +190,29 @@ export interface SamSegmentResponse {
   masks: SamMaskInfo[];
   overlay_b64: string;
   safe_zone_b64?: string;
+  session_id?: string;
   processing_time_s: number;
+}
+
+export interface SamSelectMaskResponse {
+  status: string;
+  roof_mask_id: number;
+  obstacle_mask_ids: number[];
+  roof_polygon: [number, number][];
+  obstacle_polygons: [number, number][][];
+  overlay_b64: string;
+  safe_zone_b64: string;
+  session_id: string;
+}
+
+export interface SamCalibrateResponse {
+  status: string;
+  calibrated: boolean;
+  real_area_m2?: number;
+  px_per_m?: number;
+  aspect_ratio?: number;
+  warped_preview_b64?: string;
+  message: string;
 }
 
 export interface SamPlacedPanelModel {
@@ -186,17 +229,48 @@ export interface SamPlacedPanelModel {
 
 export interface SamPlanResponse {
   status: string;
+  session_id: string;
   dimensions: [number, number];
   roof_polygon: [number, number][];
   obstacle_polygons: [number, number][][];
   panels_requested: number;
   panels_placed: number;
-  all_fitted: boolean;
+  all_fitted: bool;
   installed_kwp: number;
   panel_wattage_w: number;
   panels: SamPlacedPanelModel[];
   calibration_method: string;
   realistic_render_b64: string;
+  processing_time_s: number;
+}
+
+type bool = boolean;
+
+export interface ConfigProposal {
+  id: string;
+  strategy_name: string;
+  description: string;
+  is_recommended: boolean;
+  panels_count: int;
+  installed_kwp: number;
+  annual_kwh: number;
+  estimated_cost_tnd: number;
+  payback_years: number;
+  energy_coverage_pct: number;
+  placement_score: number;
+  orientation: string;
+  panels: SamPlacedPanelModel[];
+  realistic_render_b64: string;
+  tradeoffs: string[];
+}
+
+type int = number;
+
+export interface SamRecommendResponse {
+  status: string;
+  session_id: string;
+  recommended_config_id: string;
+  proposals: ConfigProposal[];
   processing_time_s: number;
 }
 
@@ -250,6 +324,52 @@ export interface SolarFinancialResponse {
 // ─────────────────────────────────────────────────────────────────────────────
 // API Methods
 // ─────────────────────────────────────────────────────────────────────────────
+export async function calculateSolarSizingApi(params: {
+  annualKwh: number;
+  location?: string;
+  panelWattageW?: number;
+  targetCoverage?: number;
+}): Promise<SolarSizingResponse> {
+  const baseUrl = getBackendBaseUrl();
+  const res = await fetch(`${baseUrl}/solar/sizing`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      annual_kwh: params.annualKwh,
+      location: params.location ?? "Tunis",
+      panel_wattage_w: params.panelWattageW ?? 450,
+      target_coverage: params.targetCoverage ?? 1.0,
+    }),
+  });
+  if (!res.ok) throw new Error(`Sizing API error: ${res.status}`);
+  return await res.json();
+}
+
+export async function calculateSolarFinancialApi(params: {
+  installedKwp: number;
+  annualConsumptionKwh: number;
+  location?: string;
+  annualBillTnd?: number;
+  customCostTnd?: number;
+  customTariffTnd?: number;
+}): Promise<SolarFinancialResponse> {
+  const baseUrl = getBackendBaseUrl();
+  const res = await fetch(`${baseUrl}/solar/financial`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      installed_kwp: params.installedKwp,
+      annual_consumption_kwh: params.annualConsumptionKwh,
+      location: params.location ?? "Tunis",
+      annual_bill_tnd: params.annualBillTnd,
+      custom_cost_tnd: params.customCostTnd,
+      custom_tariff_tnd: params.customTariffTnd,
+    }),
+  });
+  if (!res.ok) throw new Error(`Financial API error: ${res.status}`);
+  return await res.json();
+}
+
 export async function checkBackendHealth(): Promise<{ healthy: boolean; details?: any }> {
   try {
     const url = `${getBackendBaseUrl()}/roof/health`;
@@ -264,9 +384,10 @@ export async function checkBackendHealth(): Promise<{ healthy: boolean; details?
   }
 }
 
-/**
- * Perform SAM ViT-B rooftop segmentation.
- */
+export function getResultImageUrl(sessionId: string): string {
+  return `${getBackendBaseUrl()}/roof/result/${sessionId}`;
+}
+
 export async function segmentRooftopSam(
   imageB64: string,
   targetPanels: number = 6,
@@ -292,12 +413,127 @@ export async function segmentRooftopSam(
     throw new Error(`Erreur segmentation SAM (${res.status}): ${err}`);
   }
 
-  return await res.json();
+  const json: SamSegmentResponse = await res.json();
+  json.overlay_b64 = sanitizeDataUri(json.overlay_b64)!;
+  if (json.safe_zone_b64) json.safe_zone_b64 = sanitizeDataUri(json.safe_zone_b64)!;
+  return json;
 }
 
-/**
- * Plan solar layout and generate photorealistic photovoltaic render.
- */
+export async function selectRooftopMask(params: {
+  imageB64: string;
+  selectedMaskId: number;
+  asObstacle?: boolean;
+  pointPrompt?: [number, number];
+  edgeSetbackM?: number;
+}): Promise<SamSelectMaskResponse> {
+  const baseUrl = getBackendBaseUrl();
+  const url = `${baseUrl}/roof/select-mask`;
+
+  const cleanB64 = await ensureImageBase64(params.imageB64);
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      image_b64: cleanB64,
+      selected_mask_id: params.selectedMaskId,
+      as_obstacle: params.asObstacle ?? false,
+      point_prompt: params.pointPrompt,
+      edge_setback_m: params.edgeSetbackM ?? 0.3,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Erreur sélection masque (${res.status}): ${err}`);
+  }
+
+  const json: SamSelectMaskResponse = await res.json();
+  json.overlay_b64 = sanitizeDataUri(json.overlay_b64)!;
+  json.safe_zone_b64 = sanitizeDataUri(json.safe_zone_b64)!;
+  return json;
+}
+
+export async function calibrateRooftop(params: {
+  imageB64: string;
+  points: [number, number][];
+  realWidthM?: number;
+  realHeightM?: number;
+  refDistanceM?: number;
+  refPoints?: [number, number][];
+}): Promise<SamCalibrateResponse> {
+  const baseUrl = getBackendBaseUrl();
+  const url = `${baseUrl}/roof/calibrate`;
+
+  const cleanB64 = await ensureImageBase64(params.imageB64);
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      image_b64: cleanB64,
+      points: params.points,
+      real_width_m: params.realWidthM,
+      real_height_m: params.realHeightM,
+      ref_distance_m: params.refDistanceM,
+      ref_points: params.refPoints,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Erreur calibration (${res.status}): ${err}`);
+  }
+
+  const json: SamCalibrateResponse = await res.json();
+  if (json.warped_preview_b64) json.warped_preview_b64 = sanitizeDataUri(json.warped_preview_b64)!;
+  return json;
+}
+
+export async function getSmartRecommendations(params: {
+  imageB64: string;
+  roofMaskId?: number;
+  obstacleMaskIds?: number[];
+  customRoofPolygon?: [number, number][];
+  annualKwh?: number;
+  monthlyBillTnd?: number;
+  maxBudgetTnd?: number;
+  panelWattageW?: number;
+  realRoofAreaM2?: number;
+}): Promise<SamRecommendResponse> {
+  const baseUrl = getBackendBaseUrl();
+  const url = `${baseUrl}/roof/recommend`;
+
+  const cleanB64 = await ensureImageBase64(params.imageB64);
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      image_b64: cleanB64,
+      roof_mask_id: params.roofMaskId,
+      obstacle_mask_ids: params.obstacleMaskIds,
+      custom_roof_polygon: params.customRoofPolygon,
+      annual_kwh: params.annualKwh ?? 2400,
+      monthly_bill_tnd: params.monthlyBillTnd,
+      max_budget_tnd: params.maxBudgetTnd,
+      panel_wattage_w: params.panelWattageW ?? 450,
+      real_roof_area_m2: params.realRoofAreaM2,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Erreur recommandations intelligentes (${res.status}): ${err}`);
+  }
+
+  const json: SamRecommendResponse = await res.json();
+  for (const p of json.proposals) {
+    p.realistic_render_b64 = sanitizeDataUri(p.realistic_render_b64)!;
+  }
+  return json;
+}
+
 export async function planRooftopSolar(params: {
   imageB64: string;
   roofMaskId?: number;
@@ -308,6 +544,8 @@ export async function planRooftopSolar(params: {
   orientation?: "portrait" | "landscape" | "auto";
   edgeSetbackM?: number;
   realRoofAreaM2?: number;
+  sunAzimuthDeg?: number;
+  sunElevationDeg?: number;
 }): Promise<SamPlanResponse> {
   const baseUrl = getBackendBaseUrl();
   const url = `${baseUrl}/roof/plan`;
@@ -327,6 +565,8 @@ export async function planRooftopSolar(params: {
       orientation: params.orientation ?? "portrait",
       edge_setback_m: params.edgeSetbackM ?? 0.3,
       real_roof_area_m2: params.realRoofAreaM2,
+      sun_azimuth_deg: params.sunAzimuthDeg ?? 180.0,
+      sun_elevation_deg: params.sunElevationDeg ?? 45.0,
     }),
   });
 
@@ -335,12 +575,47 @@ export async function planRooftopSolar(params: {
     throw new Error(`Erreur calepinage solaire (${res.status}): ${err}`);
   }
 
-  return await res.json();
+  const json: SamPlanResponse = await res.json();
+  json.realistic_render_b64 = sanitizeDataUri(json.realistic_render_b64)!;
+  return json;
 }
 
-/**
- * Validate manual panel placement constraints.
- */
+export async function renderCustomLayout(params: {
+  imageB64: string;
+  panels: any[];
+  roofPolygon?: [number, number][];
+  obstacles?: [number, number][][];
+  sunAzimuthDeg?: number;
+  sunElevationDeg?: number;
+}): Promise<{ status: string; realistic_render_b64: string; session_id: string }> {
+  const baseUrl = getBackendBaseUrl();
+  const url = `${baseUrl}/roof/render`;
+
+  const cleanB64 = await ensureImageBase64(params.imageB64);
+
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      image_b64: cleanB64,
+      panels: params.panels,
+      roof_polygon: params.roofPolygon,
+      obstacles: params.obstacles,
+      sun_azimuth_deg: params.sunAzimuthDeg ?? 180.0,
+      sun_elevation_deg: params.sunElevationDeg ?? 45.0,
+    }),
+  });
+
+  if (!res.ok) {
+    const err = await res.text();
+    throw new Error(`Erreur rendu personnalisé (${res.status}): ${err}`);
+  }
+
+  const json = await res.json();
+  json.realistic_render_b64 = sanitizeDataUri(json.realistic_render_b64)!;
+  return json;
+}
+
 export async function validateRooftopPanels(params: {
   imageWidth: number;
   imageHeight: number;
@@ -348,11 +623,10 @@ export async function validateRooftopPanels(params: {
   obstaclePolygons?: [number, number][][];
   panels: any[];
 }): Promise<{
-  all_valid: boolean;
-  total_panels: number;
-  valid_panels: number;
-  invalid_panels: string[];
-  panels: Array<{ id: string; is_valid: boolean; warning?: string }>;
+  valid_count: number;
+  invalid_count: number;
+  total_kwp: number;
+  panels: any[];
 }> {
   const baseUrl = getBackendBaseUrl();
   const url = `${baseUrl}/roof/validate`;
@@ -363,6 +637,7 @@ export async function validateRooftopPanels(params: {
     body: JSON.stringify({
       image_width: params.imageWidth,
       image_height: params.imageHeight,
+      dimensions: [params.imageWidth, params.imageHeight],
       roof_polygon: params.roofPolygon,
       obstacle_polygons: params.obstaclePolygons,
       panels: params.panels,
@@ -371,177 +646,7 @@ export async function validateRooftopPanels(params: {
 
   if (!res.ok) {
     const err = await res.text();
-    throw new Error(`Erreur validation toiture (${res.status}): ${err}`);
-  }
-
-  return await res.json();
-}
-
-/**
- * Deterministic Solar Sizing API.
- */
-export async function calculateSolarSizingApi(params: {
-  annualKwh: number;
-  location: string;
-  panelWattageW?: number;
-  targetCoverage?: number;
-}): Promise<SolarSizingResponse> {
-  const baseUrl = getBackendBaseUrl();
-  const url = `${baseUrl}/solar/sizing`;
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      annual_kwh: params.annualKwh,
-      location: params.location,
-      panel_wattage_w: params.panelWattageW ?? 450,
-      target_coverage: params.targetCoverage ?? 1.0,
-    }),
-  });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Erreur calcul dimensionnement (${res.status}): ${err}`);
-  }
-
-  return await res.json();
-}
-
-/**
- * Deterministic Solar Financial API.
- */
-export async function calculateSolarFinancialApi(params: {
-  installedKwp: number;
-  annualConsumptionKwh: number;
-  annualProductionKwh?: number;
-  location?: string;
-  annualBillTnd?: number;
-  customCostTnd?: number;
-  customTariffTnd?: number;
-  selfConsumptionRate?: number;
-}): Promise<SolarFinancialResponse> {
-  const baseUrl = getBackendBaseUrl();
-  const url = `${baseUrl}/solar/financial`;
-
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      installed_kwp: params.installedKwp,
-      annual_consumption_kwh: params.annualConsumptionKwh,
-      annual_production_kwh: params.annualProductionKwh,
-      location: params.location ?? "Tunis",
-      annual_bill_tnd: params.annualBillTnd,
-      custom_cost_tnd: params.customCostTnd,
-      custom_tariff_tnd: params.customTariffTnd,
-      self_consumption_rate: params.selfConsumptionRate ?? 0.85,
-    }),
-  });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Erreur calcul financier (${res.status}): ${err}`);
-  }
-
-  return await res.json();
-}
-
-/**
- * Legacy / U-Net Rooftop Analysis (kept for backwards compatibility)
- */
-export async function analyzeRooftopImage(
-  imageUriOrBase64: string,
-  options?: {
-    declaredArea?: number;
-    targetPanels?: number;
-    panelPowerKwp?: number;
-    obstacles?: any[];
-  }
-): Promise<RooftopAnalysisResponse> {
-  const baseUrl = getBackendBaseUrl();
-  const url = `${baseUrl}/api/rooftop/analyze`;
-
-  if (imageUriOrBase64.startsWith("data:") || imageUriOrBase64.length > 500) {
-    const jsonUrl = `${baseUrl}/api/rooftop/analyze-json`;
-    const res = await fetch(jsonUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        image_base64: imageUriOrBase64,
-        declared_area_m2: options?.declaredArea,
-        target_panels: options?.targetPanels,
-        panel_power_kwp: options?.panelPowerKwp || 0.40,
-        obstacles: options?.obstacles,
-      }),
-    });
-
-    if (!res.ok) {
-      const err = await res.text();
-      throw new Error(`Erreur serveur IA (${res.status}): ${err}`);
-    }
-    return await res.json();
-  }
-
-  const formData = new FormData();
-  if (Platform.OS === "web") {
-    const blobRes = await fetch(imageUriOrBase64);
-    const blob = await blobRes.blob();
-    formData.append("file", blob, "roof.jpg");
-  } else {
-    formData.append("file", {
-      uri: imageUriOrBase64,
-      name: "roof.jpg",
-      type: "image/jpeg",
-    } as any);
-  }
-
-  formData.append(
-    "data_json",
-    JSON.stringify({
-      declared_area_m2: options?.declaredArea,
-      target_panels: options?.targetPanels,
-      panel_power_kwp: options?.panelPowerKwp || 0.40,
-      obstacles: options?.obstacles,
-    })
-  );
-
-  const res = await fetch(url, {
-    method: "POST",
-    body: formData,
-  });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Erreur analyse toiture (${res.status}): ${err}`);
-  }
-
-  return await res.json();
-}
-
-export async function askAiAdvisor(
-  panels: PlacedPanel[],
-  options?: {
-    targetPanels?: number;
-    panelPowerKwp?: number;
-    maskBase64?: string;
-  }
-): Promise<AiAdviseResponse> {
-  const url = `${getBackendBaseUrl()}/api/rooftop/advise`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      panels,
-      target_panels: options?.targetPanels ?? 10,
-      panel_power_kwp: options?.panelPowerKwp ?? 0.40,
-      mask_base64: options?.maskBase64,
-    }),
-  });
-
-  if (!res.ok) {
-    const err = await res.text();
-    throw new Error(`Erreur conseiller IA (${res.status}): ${err}`);
+    throw new Error(`Erreur validation géométrique (${res.status}): ${err}`);
   }
 
   return await res.json();
