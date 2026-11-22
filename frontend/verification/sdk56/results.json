@@ -1,0 +1,28 @@
+[
+  {
+    "name": "typescript",
+    "command": "npm run typecheck",
+    "exitCode": 0
+  },
+  {
+    "name": "tests",
+    "command": "npm test",
+    "exitCode": 0
+  },
+  {
+    "name": "expo-versions",
+    "command": "npx expo install --check",
+    "exitCode": 0
+  },
+  {
+    "name": "expo-doctor",
+    "command": "npx expo-doctor",
+    "exitCode": 1,
+    "knownIssue": "SDK 56 Hermes V1 regression; upgrading to SDK 57 is the official fix."
+  },
+  {
+    "name": "native-exports",
+    "command": "npx expo export --platform ios --platform android --output-dir verification/exports/sdk56",
+    "exitCode": 0
+  }
+]

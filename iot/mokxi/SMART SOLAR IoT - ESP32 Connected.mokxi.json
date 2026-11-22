@@ -1,0 +1,294 @@
+{
+  "version": 1,
+  "name": "SMART SOLAR IoT - ESP32 Connected",
+  "parts": [
+    {
+      "id": "bb1",
+      "type": "breadboard",
+      "props": {},
+      "x": 0,
+      "y": 0,
+      "rot": 0
+    },
+    {
+      "id": "gnd1",
+      "type": "gnd",
+      "props": {},
+      "x": 80,
+      "y": 360,
+      "rot": 0
+    },
+    {
+      "id": "sun1",
+      "type": "solar",
+      "props": {},
+      "x": -420,
+      "y": -420,
+      "rot": 0
+    },
+    {
+      "id": "rl",
+      "type": "resistor",
+      "props": {
+        "value": 36,
+        "power": "2 W"
+      },
+      "x": 240,
+      "y": 140,
+      "rot": 0
+    },
+    {
+      "id": "dmm1",
+      "type": "multimeter",
+      "props": {
+        "mode": "dca"
+      },
+      "x": 40,
+      "y": -440,
+      "rot": 0
+    },
+    {
+      "id": "dmm2",
+      "type": "multimeter",
+      "props": {
+        "mode": "dcv"
+      },
+      "x": 420,
+      "y": -440,
+      "rot": 0
+    },
+    {
+      "id": "esp321",
+      "type": "esp32",
+      "props": {
+        "wifiRssi": -52,
+        "wifiSsid": "Mokxi-Lab",
+        "wifiPassword": "breadboard",
+        "wifiMac": ""
+      },
+      "x": 760,
+      "y": -440,
+      "rot": 0
+    },
+    {
+      "id": "r1",
+      "type": "resistor",
+      "props": {
+        "value": 10000,
+        "power": "1/4 W"
+      },
+      "x": 680,
+      "y": 160,
+      "rot": 270,
+      "label": "R1"
+    },
+    {
+      "id": "r2",
+      "type": "resistor",
+      "props": {
+        "value": 20000,
+        "power": "1/4 W"
+      },
+      "x": 760,
+      "y": 160,
+      "rot": 90,
+      "label": "R2"
+    }
+  ],
+  "wires": [
+    {
+      "id": "w1",
+      "from": "bb1:tn3",
+      "to": "bb1:bn3",
+      "color": "#7a8290",
+      "bends": [
+        {
+          "x": 80,
+          "y": 200
+        }
+      ]
+    },
+    {
+      "id": "w2",
+      "from": "sun1:-",
+      "to": "bb1:tn1",
+      "color": "#2f6fed",
+      "bends": [
+        {
+          "x": -320,
+          "y": -240
+        },
+        {
+          "x": 40,
+          "y": -240
+        }
+      ]
+    },
+    {
+      "id": "w3",
+      "from": "sun1:+",
+      "to": "dmm1:A",
+      "color": "#e14b4b",
+      "bends": [
+        {
+          "x": -360,
+          "y": -80
+        },
+        {
+          "x": 140,
+          "y": -80
+        }
+      ]
+    },
+    {
+      "id": "w4",
+      "from": "dmm1:COM",
+      "to": "bb1:tp6",
+      "color": "#e14b4b",
+      "bends": [
+        {
+          "x": 200,
+          "y": -40
+        },
+        {
+          "x": 160,
+          "y": -40
+        }
+      ]
+    },
+    {
+      "id": "w5",
+      "from": "bb1:j12",
+      "to": "bb1:tp10",
+      "color": "#e14b4b",
+      "bends": [
+        {
+          "x": 240,
+          "y": 60
+        }
+      ]
+    },
+    {
+      "id": "w6",
+      "from": "bb1:j16",
+      "to": "bb1:tn13",
+      "color": "#2f6fed",
+      "bends": [
+        {
+          "x": 320,
+          "y": 60
+        }
+      ]
+    },
+    {
+      "id": "w7",
+      "from": "dmm2:V",
+      "to": "sun1:+",
+      "color": "#1f9d55",
+      "bends": [
+        {
+          "x": 460,
+          "y": 0
+        },
+        {
+          "x": -360,
+          "y": 0
+        }
+      ]
+    },
+    {
+      "id": "w8",
+      "from": "dmm2:COM",
+      "to": "sun1:-",
+      "color": "#7a8290",
+      "bends": [
+        {
+          "x": 580,
+          "y": 80
+        },
+        {
+          "x": -320,
+          "y": 80
+        }
+      ]
+    },
+    {
+      "id": "w9",
+      "from": "esp321:D34",
+      "to": "bb1:j36",
+      "color": "#e14b4b",
+      "bends": [
+        {
+          "x": 720,
+          "y": -320
+        }
+      ]
+    },
+    {
+      "id": "w10",
+      "from": "bb1:j40",
+      "to": "sun1:+",
+      "color": "#2f6fed",
+      "bends": [
+        {
+          "x": 800,
+          "y": 60
+        },
+        {
+          "x": -360,
+          "y": 60
+        }
+      ]
+    },
+    {
+      "id": "w11",
+      "from": "esp321:GND",
+      "to": "bb1:a36",
+      "color": "#1f9d55",
+      "bends": [
+        {
+          "x": 680,
+          "y": -140
+        },
+        {
+          "x": 680,
+          "y": 320
+        },
+        {
+          "x": 720,
+          "y": 320
+        }
+      ]
+    },
+    {
+      "id": "w12",
+      "from": "bb1:b40",
+      "to": "bb1:i36",
+      "color": "#e8a33d",
+      "bends": [
+        {
+          "x": 760,
+          "y": 280
+        },
+        {
+          "x": 760,
+          "y": 100
+        }
+      ]
+    }
+  ],
+  "projects": {
+    "*": {
+      "files": {
+        "sketch.ino": "// A 6 V 1 W solar panel on a 36 ohm load.\n//\n// A solar panel is a current source set by the light, with the cells' own\n// diode across it. In full sun this one gives about 0.2 A into anything from\n// a short up to about 5.5 V, and about 7.2 V with nothing on it. So the load\n// decides the voltage, and the light decides the current.\n//\n// The left meter is in series on DC amps; the right one reads the panel's\n// own voltage. In full sun (the slider at 1000 W/m2):\n//\n//   current       about 161.8 mA\n//   panel volts   about 5.99 V\n//   power         about 0.97 W, near the panel's 1 W rating\n//\n// 36 ohm (plus the meter's 1 ohm shunt) is close to the load that takes the\n// most power out of this panel, its maximum power point.\n//\n// Things to try. Change the load to 100 ohm: 6.89 V but only 68 mA, about\n// 0.47 W. Change it to 10 ohm: almost the full 0.2 A but only 2.18 V, about\n// 0.43 W. Drag the sunlight to 500 and the 36 ohm load gets only about\n// 0.34 W, while 56 ohm gets about 0.44 W: in dimmer light the best load is\n// a bigger one.\n"
+      },
+      "main": "sketch.ino"
+    },
+    "esp321": {
+      "files": {
+        "sketch.ino": "const int solarPin = 34;\n\nvoid setup() {\n    Serial.begin(115200);\n    analogReadResolution(12);\n    analogSetPinAttenuation(solarPin, ADC_11db);\n}\n\nvoid loop() {\n    int raw = analogRead(solarPin);\n\n    float adc = analogReadMilliVolts(solarPin) / 1000.0;\n    float tension = adc * 3.0;\n\n    Serial.println(\"===== SMART SOLAR IoT =====\");\n\n    Serial.print(\"ADC brut : \");\n    Serial.println(raw);\n\n    Serial.print(\"Tension ADC : \");\n    Serial.print(adc, 3);\n    Serial.println(\" V\");\n\n    Serial.print(\"Tension solaire : \");\n    Serial.print(tension, 3);\n    Serial.println(\" V\");\n\n    Serial.println(\"==========================\");\n\n    delay(1000);\n}"
+      },
+      "main": "sketch.ino"
+    }
+  }
+}

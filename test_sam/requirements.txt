@@ -1,0 +1,13 @@
+# Smart Solar — SAM AI & Placement Microservice Dependencies
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+pydantic>=2.8.0
+python-multipart>=0.0.9
+numpy>=1.26.0
+opencv-python>=4.9.0
+pillow>=10.0.0
+shapely>=2.0.0
+matplotlib>=3.8.0
+segment-anything>=1.0.0
+# Note: PyTorch with CUDA should be installed via:
+# pip install torch torchvision --index-url https://download.pytorch.org/whl/cu121

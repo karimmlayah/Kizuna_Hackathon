@@ -1,0 +1,289 @@
+{
+    "device_id": "SOLAR-001",
+    "source": "simulation",
+    "panel_count": 6,
+    "installed_power_kw": 3.3000000000000003,
+    "period_start": "2026-10-23",
+    "period_end": "2026-11-21",
+    "period_days": 30,
+    "expected_energy_kwh": 374.33,
+    "actual_energy_kwh": 258.86,
+    "energy_loss_kwh": 115.47,
+    "performance_pct": 69.15,
+    "anomaly_days": 15,
+    "consecutive_anomaly_days": 15,
+    "maintenance_alert": true,
+    "message": "Sous-performance persistante. Maintenance recommandee.",
+    "daily_measurements": [
+        {
+            "date": "2026-10-23",
+            "sun_hours": 5.1,
+            "expected_energy_kwh": 13.46,
+            "actual_energy_kwh": 12.41,
+            "performance_pct": 92.2,
+            "energy_loss_kwh": 1.05,
+            "alert": false
+        },
+        {
+            "date": "2026-10-24",
+            "sun_hours": 4.19,
+            "expected_energy_kwh": 11.06,
+            "actual_energy_kwh": 10.37,
+            "performance_pct": 93.76,
+            "energy_loss_kwh": 0.69,
+            "alert": false
+        },
+        {
+            "date": "2026-10-25",
+            "sun_hours": 5.34,
+            "expected_energy_kwh": 14.1,
+            "actual_energy_kwh": 13.74,
+            "performance_pct": 97.45,
+            "energy_loss_kwh": 0.36,
+            "alert": false
+        },
+        {
+            "date": "2026-10-26",
+            "sun_hours": 5.73,
+            "expected_energy_kwh": 15.13,
+            "actual_energy_kwh": 14.02,
+            "performance_pct": 92.66,
+            "energy_loss_kwh": 1.11,
+            "alert": false
+        },
+        {
+            "date": "2026-10-27",
+            "sun_hours": 4.55,
+            "expected_energy_kwh": 12.02,
+            "actual_energy_kwh": 11.09,
+            "performance_pct": 92.26,
+            "energy_loss_kwh": 0.93,
+            "alert": false
+        },
+        {
+            "date": "2026-10-28",
+            "sun_hours": 4.05,
+            "expected_energy_kwh": 10.68,
+            "actual_energy_kwh": 10.26,
+            "performance_pct": 96.07,
+            "energy_loss_kwh": 0.42,
+            "alert": false
+        },
+        {
+            "date": "2026-10-29",
+            "sun_hours": 3.57,
+            "expected_energy_kwh": 9.42,
+            "actual_energy_kwh": 8.82,
+            "performance_pct": 93.63,
+            "energy_loss_kwh": 0.6,
+            "alert": false
+        },
+        {
+            "date": "2026-10-30",
+            "sun_hours": 5.12,
+            "expected_energy_kwh": 13.53,
+            "actual_energy_kwh": 13.04,
+            "performance_pct": 96.38,
+            "energy_loss_kwh": 0.49,
+            "alert": false
+        },
+        {
+            "date": "2026-10-31",
+            "sun_hours": 4.05,
+            "expected_energy_kwh": 10.69,
+            "actual_energy_kwh": 10.34,
+            "performance_pct": 96.73,
+            "energy_loss_kwh": 0.35,
+            "alert": false
+        },
+        {
+            "date": "2026-11-01",
+            "sun_hours": 5.52,
+            "expected_energy_kwh": 14.58,
+            "actual_energy_kwh": 13.42,
+            "performance_pct": 92.04,
+            "energy_loss_kwh": 1.16,
+            "alert": false
+        },
+        {
+            "date": "2026-11-02",
+            "sun_hours": 5.51,
+            "expected_energy_kwh": 14.56,
+            "actual_energy_kwh": 14.21,
+            "performance_pct": 97.6,
+            "energy_loss_kwh": 0.35,
+            "alert": false
+        },
+        {
+            "date": "2026-11-03",
+            "sun_hours": 4.35,
+            "expected_energy_kwh": 11.49,
+            "actual_energy_kwh": 10.71,
+            "performance_pct": 93.21,
+            "energy_loss_kwh": 0.78,
+            "alert": false
+        },
+        {
+            "date": "2026-11-04",
+            "sun_hours": 5.89,
+            "expected_energy_kwh": 15.56,
+            "actual_energy_kwh": 14.73,
+            "performance_pct": 94.67,
+            "energy_loss_kwh": 0.83,
+            "alert": false
+        },
+        {
+            "date": "2026-11-05",
+            "sun_hours": 3.73,
+            "expected_energy_kwh": 9.85,
+            "actual_energy_kwh": 9.14,
+            "performance_pct": 92.79,
+            "energy_loss_kwh": 0.71,
+            "alert": false
+        },
+        {
+            "date": "2026-11-06",
+            "sun_hours": 5.62,
+            "expected_energy_kwh": 14.83,
+            "actual_energy_kwh": 14.36,
+            "performance_pct": 96.83,
+            "energy_loss_kwh": 0.47,
+            "alert": false
+        },
+        {
+            "date": "2026-11-07",
+            "sun_hours": 5.52,
+            "expected_energy_kwh": 14.57,
+            "actual_energy_kwh": 6.69,
+            "performance_pct": 45.92,
+            "energy_loss_kwh": 7.88,
+            "alert": true
+        },
+        {
+            "date": "2026-11-08",
+            "sun_hours": 4.84,
+            "expected_energy_kwh": 12.78,
+            "actual_energy_kwh": 6.34,
+            "performance_pct": 49.61,
+            "energy_loss_kwh": 6.44,
+            "alert": true
+        },
+        {
+            "date": "2026-11-09",
+            "sun_hours": 4.45,
+            "expected_energy_kwh": 11.74,
+            "actual_energy_kwh": 5.08,
+            "performance_pct": 43.27,
+            "energy_loss_kwh": 6.66,
+            "alert": true
+        },
+        {
+            "date": "2026-11-10",
+            "sun_hours": 5.57,
+            "expected_energy_kwh": 14.71,
+            "actual_energy_kwh": 6.51,
+            "performance_pct": 44.26,
+            "energy_loss_kwh": 8.2,
+            "alert": true
+        },
+        {
+            "date": "2026-11-11",
+            "sun_hours": 5.65,
+            "expected_energy_kwh": 14.93,
+            "actual_energy_kwh": 6.52,
+            "performance_pct": 43.67,
+            "energy_loss_kwh": 8.41,
+            "alert": true
+        },
+        {
+            "date": "2026-11-12",
+            "sun_hours": 5.26,
+            "expected_energy_kwh": 13.89,
+            "actual_energy_kwh": 4.96,
+            "performance_pct": 35.71,
+            "energy_loss_kwh": 8.93,
+            "alert": true
+        },
+        {
+            "date": "2026-11-13",
+            "sun_hours": 4.07,
+            "expected_energy_kwh": 10.74,
+            "actual_energy_kwh": 4.23,
+            "performance_pct": 39.39,
+            "energy_loss_kwh": 6.51,
+            "alert": true
+        },
+        {
+            "date": "2026-11-14",
+            "sun_hours": 3.7,
+            "expected_energy_kwh": 9.77,
+            "actual_energy_kwh": 3.76,
+            "performance_pct": 38.49,
+            "energy_loss_kwh": 6.01,
+            "alert": true
+        },
+        {
+            "date": "2026-11-15",
+            "sun_hours": 3.75,
+            "expected_energy_kwh": 9.91,
+            "actual_energy_kwh": 3.88,
+            "performance_pct": 39.15,
+            "energy_loss_kwh": 6.03,
+            "alert": true
+        },
+        {
+            "date": "2026-11-16",
+            "sun_hours": 5.09,
+            "expected_energy_kwh": 13.44,
+            "actual_energy_kwh": 5.44,
+            "performance_pct": 40.48,
+            "energy_loss_kwh": 8.0,
+            "alert": true
+        },
+        {
+            "date": "2026-11-17",
+            "sun_hours": 4.43,
+            "expected_energy_kwh": 11.68,
+            "actual_energy_kwh": 4.46,
+            "performance_pct": 38.18,
+            "energy_loss_kwh": 7.22,
+            "alert": true
+        },
+        {
+            "date": "2026-11-18",
+            "sun_hours": 4.17,
+            "expected_energy_kwh": 11.0,
+            "actual_energy_kwh": 5.4,
+            "performance_pct": 49.09,
+            "energy_loss_kwh": 5.6,
+            "alert": true
+        },
+        {
+            "date": "2026-11-19",
+            "sun_hours": 5.12,
+            "expected_energy_kwh": 13.52,
+            "actual_energy_kwh": 5.97,
+            "performance_pct": 44.16,
+            "energy_loss_kwh": 7.55,
+            "alert": true
+        },
+        {
+            "date": "2026-11-20",
+            "sun_hours": 3.93,
+            "expected_energy_kwh": 10.37,
+            "actual_energy_kwh": 4.76,
+            "performance_pct": 45.9,
+            "energy_loss_kwh": 5.61,
+            "alert": true
+        },
+        {
+            "date": "2026-11-21",
+            "sun_hours": 3.91,
+            "expected_energy_kwh": 10.32,
+            "actual_energy_kwh": 4.2,
+            "performance_pct": 40.7,
+            "energy_loss_kwh": 6.12,
+            "alert": true
+        }
+    ]
+}

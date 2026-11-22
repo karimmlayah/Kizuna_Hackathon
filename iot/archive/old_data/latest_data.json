@@ -1,0 +1,12 @@
+{
+    "device_id": "SOLAR-001",
+    "timestamp": "2026-11-22T00:20:53.996497",
+    "source": "simulation",
+    "panel_count": 6,
+    "expected_energy_kwh": 1200,
+    "actual_energy_kwh": 1156.24,
+    "performance_pct": 96.35,
+    "energy_loss_kwh": 43.76,
+    "alert": false,
+    "status": "NORMAL"
+}

@@ -1,0 +1,126 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 360" width="100%" height="100%">
+  <defs>
+    <linearGradient id="bgGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0B132B"/>
+      <stop offset="45%" stop-color="#151D3B"/>
+      <stop offset="100%" stop-color="#1C2541"/>
+    </linearGradient>
+    <linearGradient id="solarGlow" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#FF9500"/>
+      <stop offset="50%" stop-color="#FFB800"/>
+      <stop offset="100%" stop-color="#FFD166"/>
+    </linearGradient>
+    <linearGradient id="sunGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#FFF5EB"/>
+      <stop offset="25%" stop-color="#FFD166"/>
+      <stop offset="70%" stop-color="#FF9500"/>
+      <stop offset="100%" stop-color="#D97706"/>
+    </linearGradient>
+    <radialGradient id="sunRadial" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#FFFDF7" stop-opacity="1"/>
+      <stop offset="35%" stop-color="#FFBF47" stop-opacity="0.9"/>
+      <stop offset="70%" stop-color="#FF9500" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#FF9500" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="glowFilter" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="14" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+    <linearGradient id="panelGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#1E3A8A"/>
+      <stop offset="100%" stop-color="#0F172A"/>
+    </linearGradient>
+  </defs>
+
+  <!-- Background Base -->
+  <rect width="1200" height="360" rx="16" fill="url(#bgGradient)"/>
+
+  <!-- Subtle Architectural Grid Background -->
+  <g stroke="#334155" stroke-width="0.5" opacity="0.25">
+    <line x1="80" y1="0" x2="80" y2="360"/>
+    <line x1="160" y1="0" x2="160" y2="360"/>
+    <line x1="240" y1="0" x2="240" y2="360"/>
+    <line x1="320" y1="0" x2="320" y2="360"/>
+    <line x1="400" y1="0" x2="400" y2="360"/>
+    <line x1="480" y1="0" x2="480" y2="360"/>
+    <line x1="560" y1="0" x2="560" y2="360"/>
+    <line x1="640" y1="0" x2="640" y2="360"/>
+    <line x1="720" y1="0" x2="720" y2="360"/>
+    <line x1="800" y1="0" x2="800" y2="360"/>
+    <line x1="880" y1="0" x2="880" y2="360"/>
+    <line x1="960" y1="0" x2="960" y2="360"/>
+    <line x1="1040" y1="0" x2="1040" y2="360"/>
+    <line x1="1120" y1="0" x2="1120" y2="360"/>
+    <line x1="0" y1="60" x2="1200" y2="60"/>
+    <line x1="0" y1="120" x2="1200" y2="120"/>
+    <line x1="0" y1="180" x2="1200" y2="180"/>
+    <line x1="0" y1="240" x2="1200" y2="240"/>
+    <line x1="0" y1="300" x2="1200" y2="300"/>
+  </g>
+
+  <!-- Glowing Sun Ambient Background -->
+  <circle cx="1020" cy="180" r="160" fill="url(#sunRadial)"/>
+  <circle cx="1020" cy="180" r="75" fill="url(#sunGradient)" filter="url(#glowFilter)"/>
+
+  <!-- Decorative Orbiting Energy Rings -->
+  <ellipse cx="1020" cy="180" rx="125" ry="50" fill="none" stroke="#FFBF47" stroke-width="1.5" stroke-dasharray="6,6" opacity="0.6" transform="rotate(-25 1020 180)"/>
+  <ellipse cx="1020" cy="180" rx="155" ry="65" fill="none" stroke="#38BDF8" stroke-width="1.2" stroke-dasharray="8,8" opacity="0.4" transform="rotate(20 1020 180)"/>
+
+  <!-- Isometric PV Panels on Right -->
+  <g transform="translate(930, 140)">
+    <!-- Panel 1 -->
+    <polygon points="0,30 50,5 95,25 45,50" fill="url(#panelGradient)" stroke="#38BDF8" stroke-width="1.5"/>
+    <polygon points="50,5 50,11 45,56 45,50" fill="#0A0F1D"/>
+    <!-- Panel 2 -->
+    <polygon points="55,3 105,-22 150,-2 100,23" fill="url(#panelGradient)" stroke="#38BDF8" stroke-width="1.5"/>
+    <!-- Panel 3 -->
+    <polygon points="45,55 95,30 140,50 90,75" fill="url(#panelGradient)" stroke="#FFB800" stroke-width="1.5"/>
+  </g>
+
+  <!-- Left Content Column -->
+  <!-- Hackathon Badge Pill -->
+  <g transform="translate(80, 52)">
+    <rect width="210" height="30" rx="15" fill="#1E293B" stroke="#FF9500" stroke-width="1.2"/>
+    <circle cx="18" cy="15" r="5" fill="#10B981"/>
+    <text x="32" y="19" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="12" font-weight="600" fill="#FFFDF7" letter-spacing="1">KIZUNA HACKATHON 2026</text>
+  </g>
+
+  <!-- Main Title -->
+  <text x="80" y="132" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="52" font-weight="800" fill="#FFFDF7" letter-spacing="-1">SMART SOLAR</text>
+
+  <!-- Slogan -->
+  <text x="80" y="172" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="22" font-weight="700" fill="url(#solarGlow)">Your energy. Your future.</text>
+
+  <!-- Subtitle Description -->
+  <text x="80" y="212" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14.5" font-weight="400" fill="#CBD5E1">AI-Powered Photovoltaic Planning, Rooftop Segmentation,</text>
+  <text x="80" y="234" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif" font-size="14.5" font-weight="400" fill="#CBD5E1">Live IoT Monitoring and Predictive Energy Optimization for Tunisia.</text>
+
+  <!-- Tech Tags Row -->
+  <g transform="translate(80, 274)">
+    <!-- Tag 1: Gemini AI -->
+    <g transform="translate(0, 0)">
+      <rect width="105" height="28" rx="8" fill="#1E293B" stroke="#475569" stroke-width="1"/>
+      <text x="52.5" y="18" text-anchor="middle" font-family="sans-serif" font-size="11" font-weight="600" fill="#38BDF8">Gemini 3.5 AI</text>
+    </g>
+    <!-- Tag 2: Meta SAM ViT-B -->
+    <g transform="translate(115, 0)">
+      <rect width="128" height="28" rx="8" fill="#1E293B" stroke="#475569" stroke-width="1"/>
+      <text x="64" y="18" text-anchor="middle" font-family="sans-serif" font-size="11" font-weight="600" fill="#A78BFA">Meta SAM ViT-B</text>
+    </g>
+    <!-- Tag 3: FastAPI Backend -->
+    <g transform="translate(253, 0)">
+      <rect width="90" height="28" rx="8" fill="#1E293B" stroke="#475569" stroke-width="1"/>
+      <text x="45" y="18" text-anchor="middle" font-family="sans-serif" font-size="11" font-weight="600" fill="#34D399">FastAPI</text>
+    </g>
+    <!-- Tag 4: React Native / Expo -->
+    <g transform="translate(353, 0)">
+      <rect width="132" height="28" rx="8" fill="#1E293B" stroke="#475569" stroke-width="1"/>
+      <text x="66" y="18" text-anchor="middle" font-family="sans-serif" font-size="11" font-weight="600" fill="#F472B6">React Native Expo</text>
+    </g>
+    <!-- Tag 5: ESP32 IoT & Mokxi -->
+    <g transform="translate(495, 0)">
+      <rect width="140" height="28" rx="8" fill="#1E293B" stroke="#475569" stroke-width="1"/>
+      <text x="70" y="18" text-anchor="middle" font-family="sans-serif" font-size="11" font-weight="600" fill="#FBBF24">ESP32 IoT &amp; Mokxi</text>
+    </g>
+  </g>
+</svg>

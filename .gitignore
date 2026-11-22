@@ -1,0 +1,153 @@
+# ==============================================================================
+# SMART SOLAR — Root Git Ignore
+# Excludes environment secrets, virtualenvs, dependencies, AI checkpoints, and logs
+# ==============================================================================
+
+# ------------------------------------------------------------------------------
+# Secrets & Environment Configurations
+# ------------------------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.local
+*.local.txt
+api_key.local.txt
+credentials.json
+client_secret*.json
+
+# ------------------------------------------------------------------------------
+# Python & Virtual Environments
+# ------------------------------------------------------------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+.venv
+.venv/
+**/.venv/
+venv/
+**/venv/
+env/
+**/env/
+ENV/
+env.bak/
+venv.bak/
+
+# ------------------------------------------------------------------------------
+# Node & Frontend (Expo / React Native)
+# ------------------------------------------------------------------------------
+node_modules/
+**/node_modules/
+.npm
+.yarn/
+.expo/
+**/.expo/
+.expo-shared/
+dist/
+dist-*/
+web-build/
+expo-env.d.ts
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Mobile Build Artifacts
+*.apk
+*.aab
+*.ipa
+frontend/android/
+frontend/ios/
+
+# ------------------------------------------------------------------------------
+# Large AI Models & Heavy Checkpoints (>100MB, download via docs/MODELS.md)
+# ------------------------------------------------------------------------------
+*.pth
+*.pt
+*.keras
+*.h5
+*.onnx
+*.safetensors
+*.bin
+*.model
+test_sam/weights/*.pth
+backend/models/rooftop/*.keras
+backend/models/rooftop/*.h5
+backend/models/rooftop/*.onnx
+
+# ------------------------------------------------------------------------------
+# Databases & Local Telemetry
+# ------------------------------------------------------------------------------
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+iot/database/*.db
+
+# ------------------------------------------------------------------------------
+# Logs & Temporary Media
+# ------------------------------------------------------------------------------
+logs/
+*.log
+*.tmp
+*.temp
+.cache/
+.pytest_cache/
+.coverage
+htmlcov/
+backend/models/ocr/outputs/*.json
+test_sam/outputs/*.json
+*.wav
+*.mp3
+*.m4a
+*.webm
+*.ogg
+*.mp4
+*.avi
+*.mov
+
+# ------------------------------------------------------------------------------
+# Backup Archives & Transcripts
+# ------------------------------------------------------------------------------
+backups/
+**/backups/
+*.tar.gz
+*.tar
+*.zip
+*.7z
+*.rar
+.system_generated/
+transcript*.jsonl
+
+# ------------------------------------------------------------------------------
+# Operating System & IDE Files
+# ------------------------------------------------------------------------------
+.DS_Store
+Thumbs.db
+ehthumbs.db
+[Dd]esktop.ini
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

@@ -1,0 +1,27 @@
+[
+  {
+    "name": "typescript",
+    "command": "npm run typecheck",
+    "exitCode": 0
+  },
+  {
+    "name": "tests",
+    "command": "npm test",
+    "exitCode": 0
+  },
+  {
+    "name": "expo-versions",
+    "command": "npx expo install --check",
+    "exitCode": 0
+  },
+  {
+    "name": "expo-doctor",
+    "command": "npx expo-doctor",
+    "exitCode": 0
+  },
+  {
+    "name": "native-exports",
+    "command": "npx expo export --platform ios --platform android --output-dir verification/exports/sdk58",
+    "exitCode": 0
+  }
+]

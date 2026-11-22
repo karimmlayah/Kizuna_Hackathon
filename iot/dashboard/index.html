@@ -1,0 +1,664 @@
+
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Smart Solar IoT</title>
+
+<style>
+* {
+    box-sizing: border-box;
+}
+body {
+    margin: 0;
+    padding: 35px;
+    background: #0b1220;
+    color: #f1f5f9;
+    font-family: Arial, sans-serif;
+}
+.container {
+    max-width: 1200px;
+    margin: auto;
+}
+h1 {
+    margin-bottom: 8px;
+    color: #fbbf24;
+}
+.subtitle {
+    color: #94a3b8;
+    margin-bottom: 30px;
+}
+.grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+    gap: 18px;
+}
+.card {
+    background: #162133;
+    padding: 24px;
+    border-radius: 16px;
+    border: 1px solid #29374c;
+}
+.label {
+    color: #94a3b8;
+    font-size: 14px;
+}
+.value {
+    font-size: 32px;
+    font-weight: bold;
+    margin-top: 15px;
+}
+.green { color: #34d399; }
+.red { color: #fb7185; }
+.yellow { color: #fbbf24; }
+
+.alert {
+    margin: 24px 0;
+    padding: 20px;
+    border-radius: 12px;
+    font-weight: bold;
+}
+.danger {
+    background: #401c29;
+    color: #fda4af;
+    border: 1px solid #be123c;
+}
+.normal {
+    background: #10382c;
+    color: #6ee7b7;
+    border: 1px solid #059669;
+}
+.offline {
+    background: #40301c;
+    color: #fbbf24;
+}
+.bar {
+    height: 15px;
+    background: #334155;
+    border-radius: 20px;
+    overflow: hidden;
+    margin-top: 15px;
+}
+#progress {
+    height: 100%;
+    background: #34d399;
+    transition: width 0.5s;
+}
+canvas {
+    width: 100%;
+    height: 280px;
+}
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 15px;
+}
+td, th {
+    padding: 14px;
+    border-bottom: 1px solid #334155;
+    text-align: left;
+}
+th { color: #94a3b8; }
+.history {
+    margin-top: 20px;
+    overflow-x: auto;
+}
+#connection {
+    color: #94a3b8;
+    font-size: 14px;
+    margin-top: 20px;
+}
+</style>
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>SMART SOLAR IoT</h1>
+
+<div class="subtitle">
+    Monitoring photovoltaïque intelligent |
+    SOLAR-001 | 6 panneaux |
+    MODE SIMULATION
+</div>
+
+<div class="grid">
+    <div class="card">
+        <div class="label">Production attendue</div>
+        <div class="value green" id="expected">--</div>
+    </div>
+
+    <div class="card">
+        <div class="label">Production simulée</div>
+        <div class="value" id="actual">--</div>
+    </div>
+
+    <div class="card">
+        <div class="label">Performance énergétique</div>
+        <div class="value" id="performance">--</div>
+        <div class="bar">
+            <div id="progress"></div>
+        </div>
+    </div>
+
+    <div class="card">
+        <div class="label">Écart énergétique</div>
+        <div class="value yellow" id="loss">--</div>
+    </div>
+</div>
+
+<div class="alert offline" id="alert">
+    Connexion au serveur IoT...
+</div>
+
+<div class="card">
+    <h2>Historique de production</h2>
+    <p class="label">
+        Vert : attendue |
+        Orange : simulée |
+        Bilans fictifs en kWh
+    </p>
+    <canvas id="chart"></canvas>
+</div>
+
+<div class="grid" style="margin-top:20px">
+    <div class="card">
+        <div class="label">Scénarios analysés (1000 derniers max.)</div>
+        <div class="value" id="count">--</div>
+    </div>
+
+    <div class="card">
+        <div class="label">Scénarios en anomalie</div>
+        <div class="value red" id="anomalies">--</div>
+    </div>
+
+    <div class="card">
+        <div class="label">Performance moyenne</div>
+        <div class="value" id="average">--</div>
+    </div>
+</div>
+
+<div class="card history">
+    <h2>Dernières mesures simulées</h2>
+
+    <table>
+        <thead>
+            <tr>
+                <th>Heure</th>
+                <th>Attendue</th>
+                <th>Simulée</th>
+                <th>Performance</th>
+                <th>Statut</th>
+            </tr>
+        </thead>
+        <tbody id="history"></tbody>
+    </table>
+</div>
+
+<div id="connection">Connexion en cours...</div>
+
+</div>
+
+<script>
+
+const API = "http://localhost:8001/api/iot";
+
+function drawChart(rows) {
+
+    const canvas = document.getElementById("chart");
+    const ctx = canvas.getContext("2d");
+
+    canvas.width = canvas.clientWidth;
+    canvas.height = 280;
+
+    const w = canvas.width;
+    const h = canvas.height;
+
+    const left = 55;
+    const top = 15;
+    const bottom = h - 35;
+
+    ctx.clearRect(0, 0, w, h);
+
+    const data = [...rows].reverse();
+
+    if (!data.length) return;
+
+    const max = Math.max(
+        1200,
+        ...data.map(d => d.expected_energy_kwh),
+        ...data.map(d => d.actual_energy_kwh)
+    );
+
+    function y(v) {
+        return bottom - (v / max) * (bottom - top);
+    }
+
+    function x(i) {
+        return left + i * (w - left - 20)
+            / Math.max(1, data.length - 1);
+    }
+
+    ctx.font = "12px Arial";
+
+    for (let i = 0; i <= 4; i++) {
+
+        const v = max * i / 4;
+
+        ctx.strokeStyle = "#334155";
+        ctx.fillStyle = "#94a3b8";
+
+        ctx.beginPath();
+        ctx.moveTo(left, y(v));
+        ctx.lineTo(w - 15, y(v));
+        ctx.stroke();
+
+        ctx.fillText(v.toFixed(0), 5, y(v) + 4);
+    }
+
+    function line(key, color) {
+
+        ctx.strokeStyle = color;
+        ctx.lineWidth = 3;
+
+        ctx.beginPath();
+
+        data.forEach((row, i) => {
+
+            if (i === 0) {
+                ctx.moveTo(x(i), y(row[key]));
+            } else {
+                ctx.lineTo(x(i), y(row[key]));
+            }
+
+        });
+
+        ctx.stroke();
+    }
+
+    line("expected_energy_kwh", "#34d399");
+    line("actual_energy_kwh", "#fbbf24");
+}
+
+async function fetchData(endpoint) {
+    const response = await fetch(API + endpoint);
+    if (!response.ok) throw new Error("API unavailable");
+    return response.json();
+}
+
+async function updateDashboard() {
+
+    try {
+
+        const [d, history, stats] = await Promise.all([
+            fetchData("/latest"),
+            fetchData("/history?limit=30"),
+            fetchData("/statistics")
+        ]);
+
+        document.getElementById("expected").textContent =
+            d.expected_energy_kwh + " kWh";
+
+        document.getElementById("actual").textContent =
+            d.actual_energy_kwh + " kWh";
+
+        document.getElementById("performance").textContent =
+            d.performance_pct + " %";
+
+        document.getElementById("loss").textContent =
+            d.energy_loss_kwh + " kWh";
+
+        document.getElementById("progress").style.width =
+            Math.max(0, Math.min(100, d.performance_pct)) + "%";
+
+        document.getElementById("progress").style.background =
+            d.alert ? "#fb7185" : "#34d399";
+
+        const alertBox = document.getElementById("alert");
+
+        const age = Date.now() - new Date(d.timestamp).getTime();
+
+        if (age > 15000) {
+            alertBox.className = "alert offline";
+            alertBox.textContent =
+                "ATTENTION : Données non actualisées.";
+        } else {
+            alertBox.className =
+                d.alert ? "alert danger" : "alert normal";
+
+            alertBox.textContent = d.alert
+                ? "ALERTE : Sous-performance solaire. Vérification technique recommandée."
+                : "Production normale.";
+        }
+
+        document.getElementById("count").textContent =
+            stats.count ?? 0;
+
+        document.getElementById("anomalies").textContent =
+            stats.anomaly_count ?? 0;
+
+        document.getElementById("average").textContent =
+            (stats.average_performance_pct ?? 0) + " %";
+
+        const tbody = document.getElementById("history");
+        tbody.replaceChildren();
+
+        history.measurements.slice(0, 8).forEach(row => {
+
+            const tr = document.createElement("tr");
+
+            const values = [
+                new Date(row.timestamp).toLocaleTimeString(),
+                row.expected_energy_kwh + " kWh",
+                row.actual_energy_kwh + " kWh",
+                row.performance_pct + "%",
+                row.alert ? "ANOMALIE" : "NORMAL"
+            ];
+
+            values.forEach((value, i) => {
+                const td = document.createElement("td");
+                td.textContent = value;
+
+                if (i === 4) {
+                    td.className = row.alert ? "red" : "green";
+                }
+
+                tr.appendChild(td);
+            });
+
+            tbody.appendChild(tr);
+        });
+
+        drawChart(history.measurements);
+
+        document.getElementById("connection").textContent =
+            "API connectée | Dernière donnée : "
+            + new Date(d.timestamp).toLocaleTimeString();
+
+    } catch (error) {
+
+        const alertBox = document.getElementById("alert");
+
+        alertBox.className = "alert offline";
+        alertBox.textContent = "API IoT inaccessible.";
+
+        document.getElementById("connection").textContent =
+            "Vérifier le serveur FastAPI sur le port 8001.";
+    }
+}
+
+async function refreshLoop() {
+    await updateDashboard();
+    setTimeout(refreshLoop, 3000);
+}
+
+refreshLoop();
+
+</script>
+
+</body>
+
+<div class="container" style="margin-top:35px;margin-bottom:40px">
+
+    <h1>BILAN ENERGETIQUE MENSUEL</h1>
+
+    <p class="subtitle" id="monthlyPeriod">
+        Chargement du bilan...
+    </p>
+
+    <div class="grid">
+
+        <div class="card">
+            <div class="label">Production attendue</div>
+            <div class="value green" id="mExpected">--</div>
+        </div>
+
+        <div class="card">
+            <div class="label">Production simulee</div>
+            <div class="value" id="mActual">--</div>
+        </div>
+
+        <div class="card">
+            <div class="label">Performance mensuelle</div>
+            <div class="value" id="mPerformance">--</div>
+        </div>
+
+        <div class="card">
+            <div class="label">Energie manquante</div>
+            <div class="value yellow" id="mLoss">--</div>
+        </div>
+
+    </div>
+
+    <div class="alert offline" id="monthlyAlert">
+        Analyse en cours...
+    </div>
+
+    <div class="card">
+
+        <h2>Production journaliere - 30 jours</h2>
+
+        <p class="label">
+            Bleu : attendue |
+            Vert : normale |
+            Rouge : sous-performance
+        </p>
+
+        <canvas id="monthlyChart"></canvas>
+
+    </div>
+
+    <div class="grid" style="margin-top:20px">
+
+        <div class="card">
+            <div class="label">Jours en anomalie</div>
+            <div class="value red" id="mAnomalies">--</div>
+        </div>
+
+        <div class="card">
+            <div class="label">Anomalies consecutives</div>
+            <div class="value red" id="mConsecutive">--</div>
+        </div>
+
+        <div class="card">
+            <div class="label">Puissance installee</div>
+            <div class="value green" id="mPower">--</div>
+        </div>
+
+    </div>
+
+    <div class="card" style="margin-top:20px">
+
+        <h2>Calendrier de performance</h2>
+
+        <div id="monthlyCalendar" style="
+            display:grid;
+            grid-template-columns:repeat(10,1fr);
+            gap:8px;
+        "></div>
+
+        <p class="label">
+            Vert : production normale |
+            Rouge : sous-performance
+        </p>
+
+    </div>
+
+</div>
+
+<script>
+
+function drawMonthlyChart(rows) {
+
+    const canvas = document.getElementById("monthlyChart");
+    const ctx = canvas.getContext("2d");
+
+    canvas.width = canvas.clientWidth;
+    canvas.height = 280;
+
+    const w = canvas.width;
+    const h = canvas.height;
+
+    const left = 40;
+    const bottom = h - 30;
+    const top = 20;
+
+    if (!rows.length) return;
+
+    const max = Math.max(
+        ...rows.map(d => d.expected_energy_kwh),
+        ...rows.map(d => d.actual_energy_kwh),
+        1
+    ) * 1.1;
+
+    const step = (w - left - 15) / rows.length;
+    const barWidth = step * 0.35;
+
+    function y(value) {
+        return bottom - value / max * (bottom - top);
+    }
+
+    ctx.font = "11px Arial";
+
+    for (let i = 0; i <= 4; i++) {
+
+        const value = max * i / 4;
+
+        ctx.strokeStyle = "#334155";
+        ctx.fillStyle = "#94a3b8";
+
+        ctx.beginPath();
+        ctx.moveTo(left, y(value));
+        ctx.lineTo(w - 10, y(value));
+        ctx.stroke();
+
+        ctx.fillText(value.toFixed(1), 2, y(value));
+    }
+
+    rows.forEach((d, i) => {
+
+        const x = left + i * step;
+
+        ctx.fillStyle = "#60a5fa";
+
+        ctx.fillRect(
+            x,
+            y(d.expected_energy_kwh),
+            barWidth,
+            bottom - y(d.expected_energy_kwh)
+        );
+
+        ctx.fillStyle = d.alert ? "#fb7185" : "#34d399";
+
+        ctx.fillRect(
+            x + barWidth,
+            y(d.actual_energy_kwh),
+            barWidth,
+            bottom - y(d.actual_energy_kwh)
+        );
+
+        if (i % 5 === 0 || i === rows.length - 1) {
+
+            ctx.fillStyle = "#94a3b8";
+            ctx.fillText("J" + (i + 1), x, h - 8);
+        }
+    });
+}
+
+async function loadMonthlyReport() {
+
+    try {
+
+        const response = await fetch(
+            "http://localhost:8001/api/iot/monthly"
+        );
+
+        if (!response.ok) {
+            throw new Error("API unavailable");
+        }
+
+        const d = await response.json();
+
+        document.getElementById("monthlyPeriod").textContent =
+            d.period_start + " au " + d.period_end
+            + " | " + d.panel_count + " panneaux | SIMULATION";
+
+        document.getElementById("mExpected").textContent =
+            d.expected_energy_kwh + " kWh";
+
+        document.getElementById("mActual").textContent =
+            d.actual_energy_kwh + " kWh";
+
+        document.getElementById("mPerformance").textContent =
+            d.performance_pct + " %";
+
+        document.getElementById("mLoss").textContent =
+            d.energy_loss_kwh + " kWh";
+
+        document.getElementById("mAnomalies").textContent =
+            d.anomaly_days + " jours";
+
+        document.getElementById("mConsecutive").textContent =
+            d.consecutive_anomaly_days + " jours";
+
+        document.getElementById("mPower").textContent =
+            d.installed_power_kw.toFixed(2) + " kWc";
+
+        const alertBox =
+            document.getElementById("monthlyAlert");
+
+        alertBox.className = d.maintenance_alert
+            ? "alert danger"
+            : "alert normal";
+
+        alertBox.textContent = d.maintenance_alert
+            ? "MAINTENANCE RECOMMANDEE : "
+                + d.consecutive_anomaly_days
+                + " jours consecutifs de sous-performance."
+            : "Installation normale.";
+
+        const calendar =
+            document.getElementById("monthlyCalendar");
+
+        calendar.replaceChildren();
+
+        d.daily_measurements.forEach((day, i) => {
+
+            const cell = document.createElement("div");
+
+            cell.textContent = i + 1;
+
+            cell.style.cssText =
+                "padding:12px 4px;text-align:center;"
+                + "border-radius:6px;font-weight:bold;"
+                + "color:white;";
+
+            cell.style.background = day.alert
+                ? "#be123c"
+                : "#059669";
+
+            cell.title = day.date
+                + " | Performance : "
+                + day.performance_pct + "%";
+
+            calendar.appendChild(cell);
+        });
+
+        drawMonthlyChart(d.daily_measurements);
+
+    } catch (error) {
+
+        const alertBox =
+            document.getElementById("monthlyAlert");
+
+        alertBox.className = "alert offline";
+        alertBox.textContent = "Bilan mensuel indisponible.";
+    }
+}
+
+loadMonthlyReport();
+
+</script>
+</html>

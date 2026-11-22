@@ -1,0 +1,51 @@
+{
+  "expo": {
+    "name": "Smart Solar",
+    "slug": "smart-solar",
+    "scheme": "smartsolar",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "android": {
+      "package": "tn.smartsolar.demo",
+      "permissions": [
+        "CAMERA"
+      ],
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/icon.png",
+        "backgroundColor": "#17212E"
+      }
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single",
+      "name": "Smart Solar",
+      "favicon": "./assets/icon.png"
+    },
+    "plugins": [
+      "expo-router",
+      [
+        "expo-image-picker",
+        {
+          "cameraPermission": "Photographier votre facture ou vos panneaux.",
+          "photosPermission": "Importer votre toiture, facture ou panneaux."
+        }
+      ],
+      "expo-image",
+      [
+        "expo-splash-screen",
+        {
+          "backgroundColor": "#17212E",
+          "image": "./assets/icon.png",
+          "imageWidth": 180
+        }
+      ],
+      "expo-font",
+      "expo-status-bar"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "icon": "./assets/icon.png"
+  }
+}

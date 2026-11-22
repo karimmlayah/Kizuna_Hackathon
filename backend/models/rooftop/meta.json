@@ -1,0 +1,44 @@
+{
+  "framework": "tensorflow",
+  "tf_version": "2.18.0",
+  "architecture": "U-Net (custom)",
+  "task": "rooftop_segmentation + geometric_panel_placement",
+  "input_shape": [256, 256, 3],
+  "input_format": "RGB image, normalized 0-1",
+  "output_format": "sigmoid mask 256x256x1",
+  "preprocessing": {
+    "resize": 256,
+    "normalization": "x / 255.0",
+    "color_space": "RGB"
+  },
+  "postprocessing": {
+    "threshold": 0.5,
+    "morphological_clean": true,
+    "kernel_size": 5
+  },
+  "business_logic": {
+    "dataset_source": "Kaggle - slyveinweeb/rooftop-images-for-semantic-segmentation",
+    "gsd_source_m_per_px": 0.09,
+    "tile_size_original": 400,
+    "gsd_effective_m_per_px": 0.1406,
+    "panel_dimensions_m": [1.0, 1.7],
+    "panel_area_m2": 1.7,
+    "panel_power_kwp": 0.4,
+    "row_gap_m": 0.50,
+    "col_gap_m": 0.10,
+    "edge_margin_m": 0.50,
+    "usable_fraction_v1": 0.70,
+    "annual_kwh_per_kwp": 1650
+  },
+  "placement_algorithm": {
+    "version": "v2_geometric_grid",
+    "orientations_tested": ["portrait", "landscape"],
+    "selection_rule": "max_panels"
+  },
+  "performance": {
+    "test_accuracy": 0.9788,
+    "test_dice": 0.8515,
+    "test_iou": 0.8292,
+    "test_loss": 0.0632
+  }
+}
