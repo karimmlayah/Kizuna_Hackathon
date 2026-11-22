@@ -75,7 +75,18 @@ IMG_SIZE = 256
 def preprocess_image(image_bytes: bytes) -> tuple[np.ndarray, tuple[int, int]]:
     """Decode bytes, convert to RGB, resize to 256x256, normalize [0, 1]."""
     import tensorflow as tf
-    img = Image.open(io.BytesIO(image_bytes))
+    try:
+        img = Image.open(io.BytesIO(image_bytes))
+    except Exception:
+        # Fallback to OpenCV if PIL cannot identify format directly
+        nparr = np.frombuffer(image_bytes, np.uint8)
+        bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
+        if bgr is not None:
+            rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
+            img = Image.fromarray(rgb)
+        else:
+            raise ValueError("Impossible d'identifier le format du fichier image.")
+
     if img.mode != "RGB":
         img = img.convert("RGB")
     orig_w, orig_h = img.size

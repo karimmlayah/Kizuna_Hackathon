@@ -1,4 +1,5 @@
 import { Platform } from "react-native";
+import * as FileSystem from "expo-file-system/legacy";
 
 // Default backend endpoint: localhost for Web, LAN Wi-Fi IP for native Expo Go on iPhone/Android
 const DEFAULT_LAN_IP = "172.17.12.112";
@@ -12,6 +13,61 @@ export function getBackendBaseUrl(): string {
     return `http://localhost:${PORT}`;
   }
   return `http://${DEFAULT_LAN_IP}:${PORT}`;
+}
+
+/**
+ * Universal helper: safely convert any image URI (blob:, file://, http(s):// or raw base64)
+ * into a clean base64 data string ready for FastAPI AI endpoints.
+ */
+export async function ensureImageBase64(imageInput: string): Promise<string> {
+  if (!imageInput) {
+    throw new Error("Aucune image de toiture fournie.");
+  }
+
+  // 1. If it's already a Data URL (data:image/...;base64,...)
+  if (imageInput.startsWith("data:")) {
+    const comma = imageInput.indexOf(",");
+    return comma !== -1 ? imageInput.slice(comma + 1).trim() : imageInput.trim();
+  }
+
+  // 2. If it's a blob: or network http(s) URL (Web upload or network resource)
+  if (
+    imageInput.startsWith("blob:") ||
+    imageInput.startsWith("http://") ||
+    imageInput.startsWith("https://")
+  ) {
+    try {
+      const resp = await fetch(imageInput);
+      const blob = await resp.blob();
+      return await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const res = reader.result as string;
+          const comma = res.indexOf(",");
+          resolve(comma !== -1 ? res.slice(comma + 1).trim() : res.trim());
+        };
+        reader.onerror = () => reject(new Error("Impossible de lire l'image en base64."));
+        reader.readAsDataURL(blob);
+      });
+    } catch (e) {
+      console.warn("[rooftopApi] Fetch blob to base64 failed:", e);
+    }
+  }
+
+  // 3. If it's a local file URI on mobile device
+  if (Platform.OS !== "web" && (imageInput.startsWith("file://") || imageInput.startsWith("/"))) {
+    try {
+      const base64 = await FileSystem.readAsStringAsync(imageInput, {
+        encoding: "base64" as any,
+      });
+      if (base64) return base64.trim();
+    } catch (fsErr) {
+      console.warn("[rooftopApi] FileSystem read failed:", fsErr);
+    }
+  }
+
+  // 4. Default fallback: strip comma if present
+  return imageInput.includes(",") ? imageInput.split(",")[1]!.trim() : imageInput.trim();
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -219,7 +275,7 @@ export async function segmentRooftopSam(
   const baseUrl = getBackendBaseUrl();
   const url = `${baseUrl}/roof/segment`;
 
-  const cleanB64 = imageB64.includes(",") ? imageB64.split(",")[1] : imageB64;
+  const cleanB64 = await ensureImageBase64(imageB64);
 
   const res = await fetch(url, {
     method: "POST",
@@ -256,9 +312,7 @@ export async function planRooftopSolar(params: {
   const baseUrl = getBackendBaseUrl();
   const url = `${baseUrl}/roof/plan`;
 
-  const cleanB64 = params.imageB64.includes(",")
-    ? params.imageB64.split(",")[1]
-    : params.imageB64;
+  const cleanB64 = await ensureImageBase64(params.imageB64);
 
   const res = await fetch(url, {
     method: "POST",

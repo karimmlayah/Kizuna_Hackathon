@@ -53,12 +53,14 @@ import {
   planRooftopSolar,
   validateRooftopPanels,
   checkBackendHealth,
+  ensureImageBase64,
   type PlacedPanel,
   type RooftopAnalysisResponse,
   type AiAdviseResponse,
   type SamSegmentResponse,
   type SamPlanResponse,
 } from "../services/rooftopApi";
+import { DEMO_ROOF_B64 } from "../assets/demoRoof";
 
 export default function Studio() {
   const router = useRouter();
@@ -302,8 +304,7 @@ export default function Studio() {
 
   // Load sample demo roof (Villa 85 m²)
   function loadDemoRoof() {
-    const sampleUri =
-      "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAEAAQABREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=";
+    const sampleUri = DEMO_ROOF_B64;
     const sampleObj: LocalFile = {
       uri: sampleUri,
       name: "Villa_Moderne_Toit_85m2.jpg",

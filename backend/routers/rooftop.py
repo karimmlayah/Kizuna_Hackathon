@@ -145,9 +145,18 @@ async def health_check():
 @router.post("/api/rooftop/segment")
 async def segment_endpoint(req: SamSegmentRequest):
     """Segment rooftop with Meta SAM ViT-B on GPU (or U-Net fallback)."""
+    raw_b64 = req.image_b64
+    if "," in raw_b64:
+        raw_b64 = raw_b64.split(",")[1]
+    raw_b64 = raw_b64.strip()
+    raw_b64 += "=" * (-len(raw_b64) % 4)
+
+    sam_payload = req.model_dump()
+    sam_payload["image_b64"] = raw_b64
+
     try:
         async with httpx.AsyncClient(timeout=60.0) as client:
-            resp = await client.post(f"{SAM_MICROSERVICE_URL}/roof/segment", json=req.model_dump())
+            resp = await client.post(f"{SAM_MICROSERVICE_URL}/roof/segment", json=sam_payload)
             if resp.status_code == 200:
                 return resp.json()
             logger.warning(f"SAM service error ({resp.status_code}): {resp.text}")
@@ -156,10 +165,9 @@ async def segment_endpoint(req: SamSegmentRequest):
 
     # Fallback to local U-Net
     try:
-        raw_b64 = req.image_b64
-        if "," in raw_b64:
-            raw_b64 = raw_b64.split(",")[1]
         img_bytes = base64.b64decode(raw_b64)
+        if len(img_bytes) < 50:
+            raise ValueError("Données d'image corrompues ou trop courtes.")
         unet_res = analyze_rooftop(image_bytes=img_bytes, target_panels=req.target_panels or 6)
         return {
             "status": "fallback_unet",
@@ -204,9 +212,18 @@ async def select_mask_endpoint(req: SamSelectMaskRequest):
 @router.post("/api/rooftop/plan")
 async def plan_endpoint(req: SamPlanRequest):
     """Calepinage photovoltaïque automatique et rendu photoréaliste."""
+    req_dict = req.model_dump()
+    if req_dict.get("image_b64"):
+        b64 = req_dict["image_b64"]
+        if "," in b64:
+            b64 = b64.split(",")[1]
+        b64 = b64.strip()
+        b64 += "=" * (-len(b64) % 4)
+        req_dict["image_b64"] = b64
+
     try:
         async with httpx.AsyncClient(timeout=45.0) as client:
-            resp = await client.post(f"{SAM_MICROSERVICE_URL}/roof/plan", json=req.model_dump())
+            resp = await client.post(f"{SAM_MICROSERVICE_URL}/roof/plan", json=req_dict)
             if resp.status_code == 200:
                 return resp.json()
             raise HTTPException(resp.status_code, resp.text)
@@ -442,3 +459,34 @@ def list_samples():
             }
         ]
     }
+
+
+@router.get("/api/rooftop/sample-preview/{sample_id}")
+@router.get("/sample-preview/{sample_id}")
+async def get_sample_preview(sample_id: str):
+    """Serve a sample rooftop image."""
+    from fastapi.responses import FileResponse
+    sample_file = ROOFTOP_SAMPLES_DIR / f"{sample_id}.jpg"
+    if not sample_file.exists():
+        sample_file = ROOFTOP_SAMPLES_DIR / "sample_villa.jpg"
+    if not sample_file.exists():
+        fallback_roof = Path(__file__).resolve().parent.parent.parent / "test_sam" / "test_images" / "roof.jpg"
+        if fallback_roof.exists():
+            return FileResponse(fallback_roof, media_type="image/jpeg")
+        raise HTTPException(404, "Sample image not found")
+    return FileResponse(sample_file, media_type="image/jpeg")
+
+
+@router.get("/api/rooftop/sample-b64/{sample_id}")
+@router.get("/sample-b64/{sample_id}")
+async def get_sample_b64(sample_id: str):
+    """Return base64 string for a sample rooftop."""
+    sample_file = ROOFTOP_SAMPLES_DIR / f"{sample_id}.jpg"
+    if not sample_file.exists():
+        sample_file = ROOFTOP_SAMPLES_DIR / "sample_villa.jpg"
+    if not sample_file.exists():
+        sample_file = Path(__file__).resolve().parent.parent.parent / "test_sam" / "test_images" / "roof.jpg"
+    if not sample_file.exists():
+        raise HTTPException(404, "Sample image not found")
+    b64 = base64.b64encode(sample_file.read_bytes()).decode("utf-8")
+    return {"id": sample_id, "image_b64": f"data:image/jpeg;base64,{b64}"}

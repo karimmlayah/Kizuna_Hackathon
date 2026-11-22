@@ -167,11 +167,19 @@ class ValidateResponse(BaseModel):
 def decode_image_b64(b64_str: str) -> tuple[np.ndarray, np.ndarray]:
     """Decode base64 data to BGR and RGB images."""
     raw = b64_str.split(",")[1] if "," in b64_str else b64_str
+    raw = raw.strip()
+    raw += "=" * (-len(raw) % 4)
     img_bytes = base64.b64decode(raw)
     nparr = np.frombuffer(img_bytes, np.uint8)
     bgr = cv2.imdecode(nparr, cv2.IMREAD_COLOR)
     if bgr is None:
-        raise ValueError("Impossible de décoder l'image fournie.")
+        try:
+            pil_img = Image.open(io.BytesIO(img_bytes)).convert("RGB")
+            rgb = np.array(pil_img)
+            bgr = cv2.cvtColor(rgb, cv2.COLOR_RGB2BGR)
+            return bgr, rgb
+        except Exception as pil_err:
+            raise ValueError(f"Impossible de décoder l'image fournie: {pil_err}")
     rgb = cv2.cvtColor(bgr, cv2.COLOR_BGR2RGB)
     return bgr, rgb
 
