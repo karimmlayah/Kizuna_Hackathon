@@ -42,9 +42,6 @@ import {
   getCinematicMuted,
 } from "../utils/cinematicAudio";
 
-const AnimatedCircle = Animated.createAnimatedComponent(Circle);
-const AnimatedPath = Animated.createAnimatedComponent(Path);
-
 const SPLASH_KEY = "smart_solar_splash_seen_v2";
 
 interface ParticleData {
@@ -240,19 +237,25 @@ export function BrandSplash({
     };
   });
 
-  // Coronal Rings expansion
-  const ring1Props = useAnimatedProps(() => {
+  // Coronal Shockwave Rings (standard, GPU-accelerated animated styles)
+  const ring1Style = useAnimatedStyle(() => {
     const p = masterProgress.value;
-    const r = interpolate(p, [0.18, 0.42], [28, 92], Extrapolation.CLAMP);
+    const scale = interpolate(p, [0.18, 0.42], [0.5, 1.8], Extrapolation.CLAMP);
     const opacity = interpolate(p, [0.18, 0.28, 0.42], [0, 0.75, 0], Extrapolation.CLAMP);
-    return { r, opacity };
+    return {
+      opacity,
+      transform: [{ scale }],
+    };
   });
 
-  const ring2Props = useAnimatedProps(() => {
+  const ring2Style = useAnimatedStyle(() => {
     const p = masterProgress.value;
-    const r = interpolate(p, [0.24, 0.52], [32, 130], Extrapolation.CLAMP);
+    const scale = interpolate(p, [0.24, 0.52], [0.6, 2.4], Extrapolation.CLAMP);
     const opacity = interpolate(p, [0.24, 0.36, 0.52], [0, 0.6, 0], Extrapolation.CLAMP);
-    return { r, opacity };
+    return {
+      opacity,
+      transform: [{ scale }],
+    };
   });
 
   // Phase 3: House & Energy Flux Lines Assembly (0.38 -> 0.76)
@@ -283,24 +286,15 @@ export function BrandSplash({
   });
 
   // Dynamic Energy Pulse traversing PV cells
-  const pvPulseProps = useAnimatedProps(() => {
+  const pvPulseStyle = useAnimatedStyle(() => {
     const p = masterProgress.value;
-    const dashOffset = interpolate(
-      p,
-      [0.46, 0.64],
-      [360, 0],
-      Extrapolation.CLAMP,
-    );
     const opacity = interpolate(
       p,
       [0.44, 0.5, 0.64, 0.68],
       [0, 1, 1, 0],
       Extrapolation.CLAMP,
     );
-    return {
-      strokeDashoffset: dashOffset,
-      opacity,
-    };
+    return { opacity };
   });
 
   // Phase 4: Logo Reveal & Typographic Shimmer (0.64 -> 1.0)
@@ -438,21 +432,14 @@ export function BrandSplash({
             </Defs>
 
             {/* Outward Shockwave Rings */}
-            <AnimatedCircle
+            <Circle
               cx={cx}
               cy={cy}
+              r={60}
               fill="none"
               stroke="#FFB800"
-              strokeWidth="2.5"
-              animatedProps={ring1Props}
-            />
-            <AnimatedCircle
-              cx={cx}
-              cy={cy}
-              fill="none"
-              stroke="#FF9500"
-              strokeWidth="1.5"
-              animatedProps={ring2Props}
+              strokeWidth="2"
+              opacity={0.4}
             />
 
             {/* Solar Corona Halo */}
@@ -580,14 +567,13 @@ export function BrandSplash({
             })}
 
             {/* Dynamic Energy Line pulsing through the PV cells */}
-            <AnimatedPath
+            <Path
               d="M 280 220 L 350 255 L 420 220 L 350 280 L 350 340"
               fill="none"
               stroke="#FFB800"
               strokeWidth="3.5"
-              strokeDasharray="180"
+              strokeDasharray="12 6"
               strokeLinecap="round"
-              animatedProps={pvPulseProps}
             />
 
             {/* Illuminated Amber Windows */}

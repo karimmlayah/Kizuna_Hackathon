@@ -5,13 +5,12 @@ import {
   Image,
   Pressable,
   PanResponder,
-  useWindowDimensions,
   Platform,
+  StyleSheet,
   type GestureResponderEvent,
   type PanResponderGestureState,
-  StyleSheet,
 } from "react-native";
-import Svg, { Polygon, Rect, Line, Circle, G } from "react-native-svg";
+import Svg, { Polygon, Rect, Line, Circle } from "react-native-svg";
 import {
   ZoomIn,
   ZoomOut,
@@ -19,26 +18,22 @@ import {
   AlertTriangle,
   CheckCircle2,
   Sparkles,
-  Layers,
+  Grid,
   Sliders,
-  Eye,
-  Camera,
+  Layers,
   RefreshCw,
-  Crosshair,
-  ShieldAlert,
-  HelpCircle,
 } from "lucide-react-native";
-import type { PlacedPanel, RooftopAnalysisResponse, SamMaskInfo } from "../services/rooftopApi";
-import { sanitizeDataUri } from "../services/rooftopApi";
-import { SolarStudio3D } from "./SolarStudio3D";
+import type { PlacedPanel, RooftopAnalysisResponse } from "../services/rooftopApi";
+import { normalizeImageDataUri } from "../services/rooftopApi";
+import { RoofStudio3D } from "./RoofStudio3D";
 
 export type StudioViewMode =
   | "original"
-  | "ai_analysis"
-  | "installable_zones"
-  | "placement_plan"
+  | "masks"
+  | "safe_zone"
+  | "plan"
   | "realistic"
-  | "studio_3d";
+  | "3d";
 
 interface Props {
   photoUri: string | null;
@@ -48,20 +43,15 @@ interface Props {
   selectedId: string | null;
   showMask: boolean;
   showContours: boolean;
-  activeView: StudioViewMode;
+  activeView?: StudioViewMode;
   realisticRenderUri?: string | null;
   samOverlayUri?: string | null;
-  safeZoneUri?: string | null;
-  samMasks?: SamMaskInfo[];
-  roofPolygon?: [number, number][];
   obstaclePolygons?: [number, number][][];
-  isCalibrating?: boolean;
-  calibrationPoints?: [number, number][];
-  onCalibrationPointChange?: (index: number, pt: [number, number]) => void;
+  roofPolygon?: [number, number][];
   onSelectPanel: (id: string | null) => void;
   onUpdatePanel: (panel: PlacedPanel) => void;
-  onSelectSamMask?: (maskId: number, asObstacle?: boolean) => void;
-  onRequestGenerateRender?: () => void;
+  onSelectMask?: (maskId: number) => void;
+  onRetryAnalysis?: () => void;
 }
 
 export function RoofStudioCanvas({
@@ -72,83 +62,55 @@ export function RoofStudioCanvas({
   selectedId,
   showMask,
   showContours,
-  activeView,
+  activeView = "plan",
   realisticRenderUri,
   samOverlayUri,
-  safeZoneUri,
-  samMasks,
-  roofPolygon,
   obstaclePolygons,
-  isCalibrating = false,
-  calibrationPoints,
-  onCalibrationPointChange,
+  roofPolygon,
   onSelectPanel,
   onUpdatePanel,
-  onSelectSamMask,
-  onRequestGenerateRender,
+  onSelectMask,
+  onRetryAnalysis,
 }: Props) {
   const [zoom, setZoom] = useState(1);
-  const [canvasSize, setCanvasSize] = useState({ width: 620, height: 430 });
-  const sizeRef = useRef({ width: 620, height: 430 });
+  const [magneticGrid, setMagneticGrid] = useState(true);
+  const [imageError, setImageError] = useState(false);
+  const sizeRef = useRef({ width: 640, height: 400 });
 
-  // Before / After slider state in "realistic" view (0 = original photo, 100 = full photorealistic render)
-  const [beforeAfterSplit, setBeforeAfterSplit] = useState<number>(100);
-
-  // Image load state tracking
-  const [isRenderLoaded, setIsRenderLoaded] = useState<boolean>(false);
-  const [isRenderError, setIsRenderError] = useState<boolean>(false);
-
-  // Layer visibility toggles in Legend
-  const [layerRoofVisible, setLayerRoofVisible] = useState(true);
-  const [layerSafeZoneVisible, setLayerSafeZoneVisible] = useState(true);
-  const [layerObstaclesVisible, setLayerObstaclesVisible] = useState(true);
-  const [layerPanelsVisible, setLayerPanelsVisible] = useState(true);
-
-  // Memoize layout handler with threshold
-  const handleLayout = useCallback((e: any) => {
-    const w = Math.round(e.nativeEvent.layout.width);
-    if (!w || w <= 0) return;
-    const aspectHeight = Math.max(340, Math.min(540, Math.round(w * 0.62)));
-    if (
-      Math.abs(sizeRef.current.width - w) < 16 &&
-      Math.abs(sizeRef.current.height - aspectHeight) < 16
-    ) {
-      return;
-    }
-    sizeRef.current = { width: w, height: aspectHeight };
-    setCanvasSize({ width: w, height: aspectHeight });
-  }, []);
-
-  // Sanitize image URIs to prevent any double-prefixing or invalid format
-  const sanitizedPhotoUri = useMemo(() => sanitizeDataUri(photoUri), [photoUri]);
-  const sanitizedRealisticUri = useMemo(
-    () => sanitizeDataUri(realisticRenderUri),
+  // Normalization to prevent 'data:image/...;base64,data:image/...' double prefixing
+  const cleanPhotoUri = useMemo(() => normalizeImageDataUri(photoUri), [photoUri]);
+  const cleanRealisticUri = useMemo(
+    () => normalizeImageDataUri(realisticRenderUri),
     [realisticRenderUri]
   );
-  const sanitizedOverlayUri = useMemo(() => sanitizeDataUri(samOverlayUri), [samOverlayUri]);
-  const sanitizedSafeZoneUri = useMemo(() => sanitizeDataUri(safeZoneUri), [safeZoneUri]);
+  const cleanSamOverlayUri = useMemo(
+    () => normalizeImageDataUri(samOverlayUri),
+    [samOverlayUri]
+  );
 
-  // Reset load state when realistic URI changes
-  React.useEffect(() => {
-    if (sanitizedRealisticUri) {
-      setIsRenderLoaded(false);
-      setIsRenderError(false);
+  const handleLayout = useCallback((e: any) => {
+    const w = Math.round(e.nativeEvent.layout.width);
+    const h = Math.round(e.nativeEvent.layout.height);
+    if (w > 0 && h > 0) {
+      sizeRef.current = { width: w, height: h };
     }
-  }, [sanitizedRealisticUri]);
+  }, []);
 
-  // Pan Responder for moving individual panels in manual mode
+  // Pan Responder for manual dragging with optional magnetic grid
   const draggingId = useRef<string | null>(null);
   const dragStartPct = useRef({ x: 0, y: 0 });
 
   const panResponder = useMemo(
     () =>
       PanResponder.create({
-        onStartShouldSetPanResponder: () => activeView === "placement_plan" || mode === "manual",
-        onMoveShouldSetPanResponder: () => activeView === "placement_plan" || mode === "manual",
+        onStartShouldSetPanResponder: () => mode === "manual" && activeView !== "3d",
+        onMoveShouldSetPanResponder: () => mode === "manual" && activeView !== "3d",
         onPanResponderGrant: (evt: GestureResponderEvent) => {
           const { locationX, locationY } = evt.nativeEvent;
-          const touchX_pct = (locationX / canvasSize.width) * 100;
-          const touchY_pct = (locationY / canvasSize.height) * 100;
+          const w = sizeRef.current.width || 640;
+          const h = sizeRef.current.height || 400;
+          const touchX_pct = (locationX / w) * 100;
+          const touchY_pct = (locationY / h) * 100;
 
           const hit = [...panels].reverse().find((p) => {
             const pw = p.rotation === 90 ? p.h_pct : p.w_pct;
@@ -171,15 +133,23 @@ export function RoofStudioCanvas({
           }
         },
         onPanResponderMove: (_: GestureResponderEvent, gesture: PanResponderGestureState) => {
-          if (!draggingId.current) return;
+          if (!draggingId.current || mode !== "manual") return;
           const panel = panels.find((p) => p.id === draggingId.current);
           if (!panel) return;
 
-          const dx_pct = (gesture.dx / canvasSize.width / zoom) * 100;
-          const dy_pct = (gesture.dy / canvasSize.height / zoom) * 100;
+          const w = sizeRef.current.width || 640;
+          const h = sizeRef.current.height || 400;
+          let dx_pct = (gesture.dx / w / zoom) * 100;
+          let dy_pct = (gesture.dy / h / zoom) * 100;
 
-          const newX = Math.max(2, Math.min(94, dragStartPct.current.x + dx_pct));
-          const newY = Math.max(2, Math.min(94, dragStartPct.current.y + dy_pct));
+          let newX = Math.max(2, Math.min(92, dragStartPct.current.x + dx_pct));
+          let newY = Math.max(2, Math.min(92, dragStartPct.current.y + dy_pct));
+
+          // Magnetic snap (to 2.5% increments)
+          if (magneticGrid) {
+            newX = Math.round(newX / 2.5) * 2.5;
+            newY = Math.round(newY / 2.5) * 2.5;
+          }
 
           onUpdatePanel({
             ...panel,
@@ -191,433 +161,316 @@ export function RoofStudioCanvas({
           draggingId.current = null;
         },
       }),
-    [activeView, mode, panels, canvasSize.width, canvasSize.height, zoom, onSelectPanel, onUpdatePanel]
+    [mode, activeView, panels, zoom, magneticGrid, onSelectPanel, onUpdatePanel]
   );
 
-  // SVG Roof Polygon Points
+  // SVG Roof Polygon Points (standard 800x600 viewBox coordinate space)
   const roofSvgPoints = useMemo(() => {
-    if (!roofPolygon || roofPolygon.length < 3) return "";
-    return roofPolygon
-      .map(([x, y]) => `${((x / 1024) * canvasSize.width).toFixed(1)},${((y / 768) * canvasSize.height).toFixed(1)}`)
-      .join(" ");
-  }, [roofPolygon, canvasSize.width, canvasSize.height]);
+    if (roofPolygon && roofPolygon.length >= 3) {
+      return roofPolygon
+        .filter(([x, y]) => Number.isFinite(x) && Number.isFinite(y))
+        .map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`)
+        .join(" ");
+    }
+    if (analysis?.contours && analysis.contours.length > 0) {
+      return analysis.contours[0]!
+        .filter((pt) => Number.isFinite(pt.x_pct) && Number.isFinite(pt.y_pct))
+        .map((pt) => `${((pt.x_pct / 100) * 800).toFixed(1)},${((pt.y_pct / 100) * 600).toFixed(1)}`)
+        .join(" ");
+    }
+    return null;
+  }, [roofPolygon, analysis]);
 
-  // SVG Obstacle Polygons Points
-  const obstacleSvgPoints = useMemo(() => {
+  // Obstacle SVG Polygons (standard 800x600 viewBox coordinate space)
+  const obstacleSvgPolys = useMemo(() => {
     if (!obstaclePolygons || obstaclePolygons.length === 0) return [];
     return obstaclePolygons.map((poly) =>
       poly
-        .map(([x, y]) => `${((x / 1024) * canvasSize.width).toFixed(1)},${((y / 768) * canvasSize.height).toFixed(1)}`)
+        .filter(([x, y]) => Number.isFinite(x) && Number.isFinite(y))
+        .map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`)
         .join(" ")
     );
-  }, [obstaclePolygons, canvasSize.width, canvasSize.height]);
+  }, [obstaclePolygons]);
+
+  // Badge Status Title
+  const badgeTitle = useMemo(() => {
+    if (activeView === "realistic") {
+      return cleanRealisticUri ? "Rendu Photoréaliste" : "Aperçu de Placement";
+    }
+    if (activeView === "3d") return "Solar Studio 3D";
+    if (activeView === "masks") return "Analyse & Masques SAM";
+    if (activeView === "safe_zone") return "Zones Installables";
+    if (activeView === "original") return "Photo Originale";
+    return mode === "ai" ? "Placement Conseillé IA" : "Édition Manuelle";
+  }, [activeView, cleanRealisticUri, mode]);
 
   return (
-    <View
-      onLayout={handleLayout}
-      style={{
-        position: "relative",
-        width: "100%",
-        borderRadius: 22,
-        overflow: "hidden",
-        backgroundColor: "#0B1422",
-        borderWidth: 1.5,
-        borderColor: "#FFE29A",
-      }}
-    >
-      {/* 3D View Render Option */}
-      {activeView === "studio_3d" ? (
-        <SolarStudio3D
-          panels={panels}
-          roofPolygon={roofPolygon}
-          tiltAngleDeg={20}
-          selectedPanelId={selectedId}
-          onPanelSelect={(id) => onSelectPanel(id)}
-        />
+    <View onLayout={handleLayout} style={styles.container}>
+      {/* 3D View Tab Integration */}
+      {activeView === "3d" ? (
+        <RoofStudio3D panels={panels} />
       ) : (
         <>
-          {/* Zoom / Reset Floating Toolbar */}
-          <View style={styles.zoomToolbar}>
-            <Pressable
-              onPress={() => setZoom((z) => Math.min(2.5, z + 0.2))}
-              style={styles.toolBtn}
-              accessibilityLabel="Zoom avant"
+          {/* Top Floating CAD Toolbar */}
+          <View style={styles.topToolbar}>
+            {/* View/Mode Badge */}
+            <View
+              style={[
+                styles.badge,
+                {
+                  backgroundColor:
+                    activeView === "realistic" && cleanRealisticUri
+                      ? "#D97706"
+                      : mode === "ai"
+                      ? "#047857"
+                      : "#FFB800",
+                },
+              ]}
             >
-              <ZoomIn size={15} color="#FFB800" />
-            </Pressable>
-            <Pressable
-              onPress={() => setZoom((z) => Math.max(0.7, z - 0.2))}
-              style={styles.toolBtn}
-              accessibilityLabel="Zoom arrière"
-            >
-              <ZoomOut size={15} color="#FFB800" />
-            </Pressable>
-            <Pressable
-              onPress={() => setZoom(1)}
-              style={styles.toolBtn}
-              accessibilityLabel="Réinitialiser zoom"
-            >
-              <RotateCcw size={15} color="#FFE29A" />
-            </Pressable>
-          </View>
-
-          {/* Mode & View Status Badge (Top-Left) */}
-          <View style={styles.modeBadge}>
-            {activeView === "realistic" ? (
-              isRenderLoaded ? (
-                <>
-                  <CheckCircle2 size={13} color="#10B981" />
-                  <Text style={[styles.badgeText, { color: "#10B981" }]}>
-                    Rendu Photoréaliste Actif
-                  </Text>
-                </>
+              {activeView === "realistic" && cleanRealisticUri ? (
+                <Sparkles size={13} color="#FFFFFF" />
+              ) : mode === "ai" ? (
+                <CheckCircle2 size={13} color="#FFFFFF" />
               ) : (
-                <>
-                  <AlertTriangle size={13} color="#FFB800" />
-                  <Text style={[styles.badgeText, { color: "#FFB800" }]}>
-                    Rendu en attente
-                  </Text>
-                </>
-              )
-            ) : activeView === "ai_analysis" ? (
-              <>
-                <Sparkles size={13} color="#38BDF8" />
-                <Text style={[styles.badgeText, { color: "#38BDF8" }]}>
-                  Analyse de votre toiture
-                </Text>
-              </>
-            ) : activeView === "installable_zones" ? (
-              <>
-                <Crosshair size={13} color="#10B981" />
-                <Text style={[styles.badgeText, { color: "#10B981" }]}>
-                  Zones Installables Nettes
-                </Text>
-              </>
-            ) : (
-              <>
-                <Sliders size={13} color="#FFEAA7" />
-                <Text style={[styles.badgeText, { color: "#FFEAA7" }]}>
-                  Disposition des panneaux
-                </Text>
-              </>
-            )}
+                <AlertTriangle size={13} color="#17212E" />
+              )}
+              <Text
+                style={[
+                  styles.badgeText,
+                  {
+                    color:
+                      mode === "manual" && activeView !== "realistic"
+                        ? "#17212E"
+                        : "#FFFFFF",
+                  },
+                ]}
+              >
+                {badgeTitle}
+              </Text>
+            </View>
+
+            {/* Zoom & Magnetic Grid Tools */}
+            <View style={styles.toolGroup}>
+              <Pressable
+                onPress={() => setMagneticGrid((g) => !g)}
+                accessibilityLabel="Grille magnétique"
+                style={[styles.iconButton, magneticGrid && styles.iconButtonActive]}
+              >
+                <Grid size={15} color={magneticGrid ? "#FFB800" : "#94A3B8"} />
+              </Pressable>
+              <Pressable
+                onPress={() => setZoom((z) => Math.min(2.5, z + 0.25))}
+                accessibilityLabel="Zoom avant"
+                style={styles.iconButton}
+              >
+                <ZoomIn size={15} color="#FFB800" />
+              </Pressable>
+              <Pressable
+                onPress={() => setZoom((z) => Math.max(0.75, z - 0.25))}
+                accessibilityLabel="Zoom arrière"
+                style={styles.iconButton}
+              >
+                <ZoomOut size={15} color="#FFB800" />
+              </Pressable>
+              <Pressable
+                onPress={() => setZoom(1)}
+                accessibilityLabel="Réinitialiser la vue"
+                style={styles.iconButton}
+              >
+                <RotateCcw size={15} color="#FFE599" />
+              </Pressable>
+            </View>
           </View>
 
           {/* Canvas Viewport */}
           <View
             {...panResponder.panHandlers}
-            style={{
-              width: "100%",
-              height: canvasSize.height,
-              position: "relative",
-              transform: [{ scale: zoom }],
-            }}
+            style={[
+              styles.viewport,
+              {
+                transform: [{ scale: zoom }],
+              },
+            ]}
           >
-            {/* 1. VIEW: REALISTIC RENDER (WITH BEFORE/AFTER COMPARISON) */}
-            {activeView === "realistic" ? (
-              sanitizedRealisticUri && !isRenderError ? (
-                <View style={{ width: "100%", height: "100%", position: "relative" }}>
-                  {/* Underneath: Original Rooftop Photo */}
-                  {sanitizedPhotoUri && (
-                    <img
-                      src={sanitizedPhotoUri}
-                      alt="Toiture originale"
-                      style={{
-                        position: "absolute",
-                        top: 0,
-                        left: 0,
-                        width: "100%",
-                        height: "100%",
-                        objectFit: "contain",
-                        display: "block",
-                      }}
-                    />
-                  )}
-
-                  {/* Overlaid: Realistic Photovoltaic Render with split clip */}
-                  <img
-                    src={sanitizedRealisticUri}
-                    alt="Rendu photoréaliste toiture"
-                    onLoad={() => setIsRenderLoaded(true)}
-                    onError={() => setIsRenderError(true)}
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "contain",
-                      display: "block",
-                      clipPath: `inset(0 ${100 - beforeAfterSplit}% 0 0)`,
-                      transition: "clip-path 0.1s ease-out",
-                    }}
-                  />
-
-                  {/* Split Line Indicator if comparison is active */}
-                  {beforeAfterSplit < 99 && beforeAfterSplit > 1 && (
-                    <View
-                      style={{
-                        position: "absolute",
-                        top: 0,
-                        bottom: 0,
-                        left: `${beforeAfterSplit}%`,
-                        width: 2,
-                        backgroundColor: "#FFB800",
-                        zIndex: 25,
-                      }}
-                    />
-                  )}
-                </View>
-              ) : (
-                /* Empty state / Error state for Photorealistic view */
-                <View style={styles.emptyContainer}>
-                  <Sparkles size={38} color="#FFB800" style={{ marginBottom: 12 }} />
-                  <Text style={styles.emptyTitle}>Rendu Visuel Non Disponible</Text>
-                  <Text style={styles.emptySubtitle}>
-                    {isRenderError
-                      ? "L'image du rendu n'a pas pu être chargée ou décodée."
-                      : "Lancez l'analyse automatique ou disposez vos panneaux pour visualiser votre toiture équipée."}
-                  </Text>
-                  {onRequestGenerateRender && (
-                    <Pressable
-                      style={styles.retryBtn}
-                      onPress={onRequestGenerateRender}
-                    >
-                      <RefreshCw size={14} color="#17212E" />
-                      <Text style={styles.retryBtnText}>Afficher mon installation</Text>
-                    </Pressable>
-                  )}
-                </View>
-              )
-            ) : (
-              /* 2. VIEWS: ORIGINAL, AI ANALYSIS, INSTALLABLE ZONES, PLACEMENT PLAN */
-              <View style={{ width: "100%", height: "100%", position: "relative" }}>
-                {/* Background Photo */}
-                {sanitizedPhotoUri ? (
-                  <img
-                    src={sanitizedPhotoUri}
-                    alt="Photo toiture"
-                    style={{
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "contain",
-                      display: "block",
-                      userSelect: "none",
-                    }}
-                  />
-                ) : (
-                  <View style={styles.emptyContainer}>
-                    <Camera size={38} color="#64748B" style={{ marginBottom: 10 }} />
-                    <Text style={styles.emptyTitle}>Aucune photo de toiture sélectionnée</Text>
-                    <Text style={styles.emptySubtitle}>
-                      Importez une photo aérienne ou chargez la toiture de démonstration ci-dessous.
-                    </Text>
-                  </View>
+            {/* Error Fallback Card if photo fails */}
+            {imageError ? (
+              <View style={styles.errorBox}>
+                <AlertTriangle size={32} color="#EF4444" />
+                <Text style={styles.errorText}>
+                  Impossible de charger l'image de toiture.
+                </Text>
+                {onRetryAnalysis && (
+                  <Pressable onPress={onRetryAnalysis} style={styles.retryButton}>
+                    <RefreshCw size={14} color="#FFFFFF" />
+                    <Text style={styles.retryButtonText}>Réessayer l'analyse</Text>
+                  </Pressable>
                 )}
+              </View>
+            ) : null}
 
-                {/* Layer 2: Surfaces de toiture détectées (View: ai_analysis) */}
-                {activeView === "ai_analysis" && sanitizedOverlayUri && (
-                  <img
-                    src={sanitizedOverlayUri}
-                    alt="Surfaces de toiture détectées"
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "contain",
-                      opacity: 0.65,
-                      pointerEvents: "none",
-                    }}
-                  />
-                )}
-
-                {/* Layer 3: Installable Safe Zone (View: installable_zones) */}
-                {activeView === "installable_zones" && sanitizedSafeZoneUri && (
-                  <img
-                    src={sanitizedSafeZoneUri}
-                    alt="Zone installable nette"
-                    style={{
-                      position: "absolute",
-                      top: 0,
-                      left: 0,
-                      width: "100%",
-                      height: "100%",
-                      objectFit: "contain",
-                      opacity: 0.70,
-                      pointerEvents: "none",
-                    }}
-                  />
-                )}
-
-                {/* Vector SVG Overlays (Contours, Obstacles, Calibration) */}
-                <Svg
-                  style={{
-                    position: "absolute",
-                    top: 0,
-                    left: 0,
-                    width: "100%",
-                    height: "100%",
-                    pointerEvents: isCalibrating ? "auto" : "none",
-                  }}
-                >
-                  {/* Roof Polygon Contour */}
-                  {layerRoofVisible && roofSvgPoints && (
-                    <Polygon
-                      points={roofSvgPoints}
-                      fill="rgba(0, 184, 255, 0.12)"
-                      stroke="#FFB800"
-                      strokeWidth="2.5"
-                      strokeDasharray="6 3"
+            {/* LAYER 1: Base Rooftop Photo */}
+            {cleanPhotoUri && !imageError ? (
+              <Image
+                source={{ uri: cleanPhotoUri }}
+                onError={() => setImageError(true)}
+                style={StyleSheet.absoluteFill}
+                resizeMode="cover"
+              />
+            ) : !cleanPhotoUri && !imageError ? (
+              /* Architectural blueprint background if no photo */
+              <View style={styles.blueprintBg}>
+                <Svg width="100%" height="100%">
+                  {Array.from({ length: 12 }).map((_, r) => (
+                    <Line
+                      key={`h-${r}`}
+                      x1="0"
+                      y1={r * 40}
+                      x2="1000"
+                      y2={r * 40}
+                      stroke="rgba(255, 255, 255, 0.05)"
+                      strokeWidth="1"
                     />
-                  )}
-
-                  {/* Obstacles Detected */}
-                  {layerObstaclesVisible &&
-                    obstacleSvgPoints.map((pts, idx) => (
-                      <Polygon
-                        key={`obs-${idx}`}
-                        points={pts}
-                        fill="rgba(239, 68, 68, 0.40)"
-                        stroke="#EF4444"
-                        strokeWidth="2"
-                      />
-                    ))}
-
-                  {/* Calibration 4 Points Quad */}
-                  {isCalibrating && calibrationPoints && calibrationPoints.length === 4 && (
-                    <G>
-                      <Polygon
-                        points={calibrationPoints
-                          .map(([x, y]) => `${(x / 100) * canvasSize.width},${(y / 100) * canvasSize.height}`)
-                          .join(" ")}
-                        fill="rgba(255, 184, 0, 0.18)"
-                        stroke="#FFB800"
-                        strokeWidth="2"
-                      />
-                      {calibrationPoints.map(([x, y], i) => (
-                        <Circle
-                          key={`calib-${i}`}
-                          cx={(x / 100) * canvasSize.width}
-                          cy={(y / 100) * canvasSize.height}
-                          r={8}
-                          fill="#FFB800"
-                          stroke="#FFFFFF"
-                          strokeWidth="2"
-                        />
-                      ))}
-                    </G>
-                  )}
+                  ))}
+                  {Array.from({ length: 18 }).map((_, c) => (
+                    <Line
+                      key={`v-${c}`}
+                      x1={c * 40}
+                      y1="0"
+                      x2={c * 40}
+                      y2="600"
+                      stroke="rgba(255, 255, 255, 0.05)"
+                      strokeWidth="1"
+                    />
+                  ))}
                 </Svg>
+                <Text style={styles.blueprintHint}>
+                  Importez une photo pour calibrer et poser vos panneaux
+                </Text>
+              </View>
+            ) : null}
 
-                {/* Layer 4: Interactive Photovoltaic Panels (View: placement_plan) */}
-                {(activeView === "placement_plan" || mode === "manual") &&
-                  layerPanelsVisible &&
-                  panels.map((p, index) => {
-                    const isSelected = p.id === selectedId;
-                    const isValid = p.valid !== false;
-                    const pw = p.rotation === 90 ? p.h_pct : p.w_pct;
-                    const ph = p.rotation === 90 ? p.w_pct : p.h_pct;
+            {/* LAYER 2: SAM Masks & Safe Zones */}
+            {(activeView === "masks" || showMask) && cleanSamOverlayUri ? (
+              <Image
+                source={{ uri: cleanSamOverlayUri }}
+                style={[StyleSheet.absoluteFill, { opacity: 0.65 }]}
+                resizeMode="cover"
+              />
+            ) : null}
 
-                    return (
-                      <View
-                        key={p.id}
-                        style={{
-                          position: "absolute",
-                          left: `${p.x_pct}%`,
-                          top: `${p.y_pct}%`,
-                          width: `${pw}%`,
-                          height: `${ph}%`,
-                          backgroundColor: isSelected
-                            ? "rgba(255, 184, 0, 0.35)"
-                            : isValid
-                            ? "rgba(16, 185, 129, 0.25)"
-                            : "rgba(239, 68, 68, 0.45)",
-                          borderWidth: isSelected ? 2.5 : 1.5,
-                          borderColor: isSelected
-                            ? "#FFB800"
-                            : isValid
-                            ? "#10B981"
-                            : "#EF4444",
-                          borderRadius: 3,
-                          alignItems: "center",
-                          justifyContent: "center",
-                          boxShadow: isSelected
-                            ? "0 0 12px rgba(255, 184, 0, 0.6)"
-                            : "0 2px 6px rgba(0,0,0,0.4)",
-                        }}
-                      >
-                        <Text
-                          style={{
-                            fontSize: 10,
-                            fontWeight: "800",
-                            color: "#FFFFFF",
-                            textShadowColor: "rgba(0,0,0,0.8)",
-                            textShadowOffset: { width: 0, height: 1 },
-                            textShadowRadius: 2,
-                          }}
-                        >
-                          #{index + 1}
-                        </Text>
-                      </View>
-                    );
-                  })}
+            {/* LAYER 3: Installable Safe Zone & Obstacles Polygons */}
+            {(activeView === "safe_zone" || showContours) && (
+              <Svg
+                viewBox="0 0 800 600"
+                style={StyleSheet.absoluteFill}
+                pointerEvents="none"
+              >
+                {/* Roof Contour (Green) */}
+                {roofSvgPoints && (
+                  <Polygon
+                    points={roofSvgPoints}
+                    fill="rgba(16, 185, 129, 0.16)"
+                    stroke="#10B981"
+                    strokeWidth="2.5"
+                    strokeDasharray="6 3"
+                  />
+                )}
+                {/* Obstacle Exclusions (Red) */}
+                {obstacleSvgPolys.map((pts, i) => (
+                  <Polygon
+                    key={`obs-${i}`}
+                    points={pts}
+                    fill="rgba(239, 68, 68, 0.40)"
+                    stroke="#EF4444"
+                    strokeWidth="2"
+                    strokeDasharray="4 2"
+                  />
+                ))}
+              </Svg>
+            )}
+
+            {/* LAYER 4: Photovoltaic Panels CAD Layout (Shown in 'plan', 'safe_zone', 'masks') */}
+            {activeView !== "realistic" &&
+              panels.map((p) => {
+                const isSelected = p.id === selectedId;
+                const isInvalid = p.valid === false;
+                const isRotated = p.rotation === 90;
+
+                const renderW = isRotated ? p.h_pct : p.w_pct;
+                const renderH = isRotated ? p.w_pct : p.h_pct;
+
+                return (
+                  <Pressable
+                    key={p.id}
+                    onPress={() => onSelectPanel(p.id)}
+                    style={[
+                      styles.panelBox,
+                      {
+                        left: `${p.x_pct}%`,
+                        top: `${p.y_pct}%`,
+                        width: `${renderW}%`,
+                        height: `${renderH}%`,
+                        borderColor: isInvalid
+                          ? "#EF4444"
+                          : isSelected
+                          ? "#FFB800"
+                          : "#38BDF8",
+                        borderWidth: isSelected ? 2.5 : isInvalid ? 2 : 1.2,
+                        backgroundColor: isInvalid
+                          ? "rgba(239, 68, 68, 0.65)"
+                          : isSelected
+                          ? "rgba(8, 16, 26, 0.95)"
+                          : "rgba(13, 24, 38, 0.88)",
+                      },
+                    ]}
+                  >
+                    <Text
+                      style={[
+                        styles.panelIdText,
+                        { color: isInvalid ? "#FCA5A5" : isSelected ? "#FFB800" : "#94A3B8" },
+                      ]}
+                    >
+                      {p.id.replace("p_", "P")}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+
+            {/* LAYER 5: Photorealistic Render with Before/After Comparison Slider */}
+            {activeView === "realistic" && cleanRealisticUri && (
+              <View
+                style={[
+                  StyleSheet.absoluteFill,
+                  { overflow: "hidden", pointerEvents: "none" },
+                ]}
+              >
+                <Image
+                  source={{ uri: cleanRealisticUri }}
+                  style={StyleSheet.absoluteFill}
+                  resizeMode="cover"
+                />
               </View>
             )}
           </View>
 
-          {/* Interactive Floating Legend (Bottom Left) */}
-          <View style={styles.legendCard}>
-            <View style={{ flexDirection: "row", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
-              <Pressable
-                onPress={() => setLayerRoofVisible((v) => !v)}
-                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-              >
-                <View style={[styles.legendDot, { backgroundColor: "#FFB800" }]} />
-                <Text style={styles.legendText}>Toiture</Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => setLayerSafeZoneVisible((v) => !v)}
-                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-              >
-                <View style={[styles.legendDot, { backgroundColor: "#10B981" }]} />
-                <Text style={styles.legendText}>Zone Installable</Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => setLayerObstaclesVisible((v) => !v)}
-                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-              >
-                <View style={[styles.legendDot, { backgroundColor: "#EF4444" }]} />
-                <Text style={styles.legendText}>Obstacles (Cheminée, etc.)</Text>
-              </Pressable>
-
-              <Pressable
-                onPress={() => setLayerPanelsVisible((v) => !v)}
-                style={{ flexDirection: "row", alignItems: "center", gap: 6 }}
-              >
-                <View style={[styles.legendDot, { backgroundColor: "#38BDF8" }]} />
-                <Text style={styles.legendText}>Panneaux ({panels.length})</Text>
-              </Pressable>
+          {/* Interactive Legend Bar */}
+          <View style={styles.legendBar}>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: "#10B981" }]} />
+              <Text style={styles.legendText}>Surface Exploitable</Text>
             </View>
-
-            {/* Before / After Slider (When in realistic view) */}
-            {activeView === "realistic" && isRenderLoaded && (
-              <View style={{ flexDirection: "row", alignItems: "center", gap: 10, marginTop: 8 }}>
-                <Text style={{ fontSize: 11, fontWeight: "700", color: "#94A3B8" }}>Avant</Text>
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={beforeAfterSplit}
-                  onChange={(e) => setBeforeAfterSplit(parseInt(e.target.value, 10))}
-                  style={{ flex: 1, accentColor: "#FFB800", cursor: "pointer" }}
-                />
-                <Text style={{ fontSize: 11, fontWeight: "700", color: "#FFB800" }}>Après (Solaire)</Text>
-              </View>
-            )}
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: "#EF4444" }]} />
+              <Text style={styles.legendText}>Obstacle / Exclu</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: "#38BDF8" }]} />
+              <Text style={styles.legendText}>Panneaux 450W</Text>
+            </View>
+            <View style={styles.legendItem}>
+              <View style={[styles.legendDot, { backgroundColor: "#FFB800" }]} />
+              <Text style={styles.legendText}>Sélectionné</Text>
+            </View>
           </View>
         </>
       )}
@@ -626,97 +479,148 @@ export function RoofStudioCanvas({
 }
 
 const styles = StyleSheet.create({
-  zoomToolbar: {
+  container: {
+    position: "relative",
+    width: "100%",
+    borderRadius: 22,
+    overflow: "hidden",
+    backgroundColor: "#0D1826",
+    borderWidth: 1.5,
+    borderColor: "#FFE29A",
+  },
+  topToolbar: {
     position: "absolute",
     top: 14,
+    left: 14,
     right: 14,
     zIndex: 40,
     flexDirection: "row",
-    backgroundColor: "rgba(15, 23, 42, 0.85)",
-    backdropFilter: "blur(10px)" as any,
+    justifyContent: "space-between",
+    alignItems: "center",
+    pointerEvents: "box-none",
+  },
+  badge: {
+    flexDirection: "row",
+    alignItems: "center",
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    gap: 6,
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.3,
+    shadowRadius: 4,
+    elevation: 4,
+  },
+  badgeText: {
+    fontSize: 11,
+    fontWeight: "800",
+  },
+  toolGroup: {
+    flexDirection: "row",
+    backgroundColor: "rgba(23, 33, 46, 0.88)",
     borderRadius: 14,
     padding: 4,
     gap: 6,
     borderWidth: 1,
     borderColor: "rgba(255, 184, 0, 0.3)",
+    ...Platform.select({
+      web: { backdropFilter: "blur(8px)" },
+    }),
   },
-  toolBtn: {
+  iconButton: {
     padding: 6,
     borderRadius: 8,
-    backgroundColor: "rgba(255, 255, 255, 0.08)",
+    backgroundColor: "rgba(255, 255, 255, 0.06)",
   },
-  modeBadge: {
-    position: "absolute",
-    top: 14,
-    left: 14,
-    zIndex: 40,
+  iconButtonActive: {
+    backgroundColor: "rgba(255, 184, 0, 0.25)",
+    borderWidth: 1,
+    borderColor: "#FFB800",
+  },
+  viewport: {
+    width: "100%",
+    aspectRatio: 1.6,
+    maxHeight: 520,
+    minHeight: 340,
+    position: "relative",
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  errorBox: {
+    padding: 30,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 12,
+  },
+  errorText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: "#FCA5A5",
+    textAlign: "center",
+  },
+  retryButton: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: "rgba(15, 23, 42, 0.85)",
-    backdropFilter: "blur(10px)" as any,
-    borderRadius: 14,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    gap: 6,
-    borderWidth: 1,
-    borderColor: "rgba(255, 184, 0, 0.25)",
+    gap: 8,
+    backgroundColor: "#D97706",
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    borderRadius: 12,
   },
-  badgeText: {
-    fontSize: 11.5,
-    fontWeight: "800",
+  retryButtonText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: "#FFFFFF",
   },
-  emptyContainer: {
+  blueprintBg: {
     width: "100%",
     height: "100%",
-    backgroundColor: "#131C28",
+    backgroundColor: "#162334",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  blueprintHint: {
+    position: "absolute",
+    fontSize: 13,
+    fontWeight: "700",
+    color: "rgba(255, 229, 153, 0.7)",
+    textAlign: "center",
+  },
+  panelBox: {
+    position: "absolute",
+    minWidth: 26,
+    minHeight: 34,
+    borderRadius: 4,
+    alignItems: "center",
+    justifyContent: "center",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.35,
+    shadowRadius: 3,
+    elevation: 3,
+  },
+  panelIdText: {
+    fontSize: 10,
+    fontWeight: "800",
+  },
+  legendBar: {
+    flexDirection: "row",
     justifyContent: "center",
     alignItems: "center",
-    padding: 24,
+    gap: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    backgroundColor: "#0B111A",
+    borderTopWidth: 1,
+    borderTopColor: "rgba(255, 226, 154, 0.15)",
+    flexWrap: "wrap",
   },
-  emptyTitle: {
-    fontSize: 15,
-    fontWeight: "800",
-    color: "#FFFDF7",
-    marginBottom: 6,
-    textAlign: "center",
-  },
-  emptySubtitle: {
-    fontSize: 12,
-    color: "#94A3B8",
-    textAlign: "center",
-    maxWidth: 420,
-    lineHeight: 18,
-    marginBottom: 16,
-  },
-  retryBtn: {
+  legendItem: {
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
-    backgroundColor: "#FFB800",
-    paddingHorizontal: 16,
-    paddingVertical: 9,
-    borderRadius: 12,
-    shadowColor: "#FFB800",
-    shadowOpacity: 0.35,
-    shadowOffset: { width: 0, height: 2 },
-  },
-  retryBtnText: {
-    fontSize: 12,
-    fontWeight: "800",
-    color: "#17212E",
-  },
-  legendCard: {
-    position: "absolute",
-    bottom: 12,
-    left: 12,
-    right: 12,
-    zIndex: 40,
-    backgroundColor: "rgba(15, 23, 42, 0.88)",
-    backdropFilter: "blur(10px)" as any,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(255, 184, 0, 0.25)",
-    padding: 10,
   },
   legendDot: {
     width: 8,

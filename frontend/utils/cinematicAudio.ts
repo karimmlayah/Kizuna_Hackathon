@@ -28,7 +28,7 @@ function getAudioContext() {
       audioCtx = new AudioContextClass();
     }
     if (audioCtx.state === "suspended") {
-      audioCtx.resume();
+      audioCtx.resume().catch(() => {});
     }
     if (!masterGain && audioCtx) {
       masterGain = audioCtx.createGain();

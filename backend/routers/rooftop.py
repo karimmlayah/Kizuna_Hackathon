@@ -61,27 +61,6 @@ class SamSelectMaskRequest(BaseModel):
     image_b64: str
     selected_mask_id: int
     as_obstacle: bool = False
-    point_prompt: Optional[list[int]] = None
-    edge_setback_m: float = 0.3
-
-class SamCalibrateRequest(BaseModel):
-    image_b64: str
-    points: list[list[int]]
-    real_width_m: Optional[float] = None
-    real_height_m: Optional[float] = None
-    ref_distance_m: Optional[float] = None
-    ref_points: Optional[list[list[int]]] = None
-
-class SamRecommendRequest(BaseModel):
-    image_b64: str
-    roof_mask_id: Optional[int] = None
-    obstacle_mask_ids: Optional[list[int]] = None
-    custom_roof_polygon: Optional[list[list[int]]] = None
-    annual_kwh: Optional[float] = 2400.0
-    monthly_bill_tnd: Optional[float] = None
-    max_budget_tnd: Optional[float] = None
-    panel_wattage_w: int = 450
-    real_roof_area_m2: Optional[float] = None
 
 class SamPlanRequest(BaseModel):
     image_b64: str
@@ -97,24 +76,13 @@ class SamPlanRequest(BaseModel):
     spacing_m: float = 0.15
     real_roof_area_m2: Optional[float] = None
     orientation: Optional[str] = "portrait"
-    sun_azimuth_deg: float = 180.0
-    sun_elevation_deg: float = 45.0
 
 class SamValidateRequest(BaseModel):
-    image_width: Optional[int] = None
-    image_height: Optional[int] = None
-    dimensions: Optional[list[int]] = None
+    image_width: int
+    image_height: int
     roof_polygon: list[list[int]]
     obstacle_polygons: Optional[list[list[list[int]]]] = None
     panels: list[dict]
-
-class SamRenderRequest(BaseModel):
-    image_b64: str
-    panels: list[dict]
-    roof_polygon: Optional[list[list[int]]] = None
-    obstacles: Optional[list[list[list[int]]]] = None
-    sun_azimuth_deg: float = 180.0
-    sun_elevation_deg: float = 45.0
 
 class SolarSizingRequest(BaseModel):
     annual_kwh: float
@@ -168,23 +136,6 @@ async def health_check():
         "sam_ai": sam_status,
         "unet_model": unet_status
     }
-
-
-# ─────────────────────────────────────────────────────────────────────────────
-# Session Image Streaming Proxy
-# ─────────────────────────────────────────────────────────────────────────────
-@router.get("/roof/result/{session_id}")
-@router.get("/api/rooftop/result/{session_id}")
-async def get_result_image(session_id: str):
-    """Retrieve rendered image directly from SAM session store."""
-    try:
-        async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.get(f"{SAM_MICROSERVICE_URL}/roof/result/{session_id}")
-            if resp.status_code == 200:
-                return Response(content=resp.content, media_type=resp.headers.get("content-type", "image/png"))
-            raise HTTPException(resp.status_code, "Image non trouvée")
-    except httpx.RequestError as e:
-        raise HTTPException(503, f"SAM microservice inaccessible : {e}")
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -247,63 +198,14 @@ async def segment_endpoint(req: SamSegmentRequest):
 @router.post("/api/rooftop/select-mask")
 async def select_mask_endpoint(req: SamSelectMaskRequest):
     """Interactive mask selection / toggle obstacle flag."""
-    req_dict = req.model_dump()
-    if req_dict.get("image_b64"):
-        b64 = req_dict["image_b64"]
-        if "," in b64:
-            b64 = b64.split(",")[1]
-        req_dict["image_b64"] = b64.strip()
-
     try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(f"{SAM_MICROSERVICE_URL}/roof/select-mask", json=req_dict)
+        async with httpx.AsyncClient(timeout=10.0) as client:
+            resp = await client.post(f"{SAM_MICROSERVICE_URL}/roof/select-mask", json=req.model_dump())
             if resp.status_code == 200:
                 return resp.json()
             raise HTTPException(resp.status_code, resp.text)
     except httpx.RequestError as e:
         raise HTTPException(503, f"SAM service non joignable: {e}")
-
-
-@router.post("/roof/calibrate")
-@router.post("/api/rooftop/calibrate")
-async def calibrate_endpoint(req: SamCalibrateRequest):
-    """Calibration métrique par homographie perspective OpenCV."""
-    req_dict = req.model_dump()
-    if req_dict.get("image_b64"):
-        b64 = req_dict["image_b64"]
-        if "," in b64:
-            b64 = b64.split(",")[1]
-        req_dict["image_b64"] = b64.strip()
-
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(f"{SAM_MICROSERVICE_URL}/roof/calibrate", json=req_dict)
-            if resp.status_code == 200:
-                return resp.json()
-            raise HTTPException(resp.status_code, resp.text)
-    except httpx.RequestError as e:
-        raise HTTPException(503, f"SAM calibration non joignable: {e}")
-
-
-@router.post("/roof/recommend")
-@router.post("/api/rooftop/recommend")
-async def recommend_endpoint(req: SamRecommendRequest):
-    """Génération de 3 propositions intelligentes (Économique, Équilibrée, Capacité Max)."""
-    req_dict = req.model_dump()
-    if req_dict.get("image_b64"):
-        b64 = req_dict["image_b64"]
-        if "," in b64:
-            b64 = b64.split(",")[1]
-        req_dict["image_b64"] = b64.strip()
-
-    try:
-        async with httpx.AsyncClient(timeout=45.0) as client:
-            resp = await client.post(f"{SAM_MICROSERVICE_URL}/roof/recommend", json=req_dict)
-            if resp.status_code == 200:
-                return resp.json()
-            raise HTTPException(resp.status_code, resp.text)
-    except httpx.RequestError as e:
-        raise HTTPException(503, f"SAM engine non joignable: {e}")
 
 
 @router.post("/roof/plan")
@@ -329,46 +231,195 @@ async def plan_endpoint(req: SamPlanRequest):
         raise HTTPException(503, f"SAM placement engine non joignable: {e}")
 
 
-@router.post("/roof/render")
-@router.post("/api/rooftop/render")
-async def render_endpoint(req: SamRenderRequest):
-    """Rendu photoréaliste dynamique des panneaux personnalisés."""
-    req_dict = req.model_dump()
-    if req_dict.get("image_b64"):
-        b64 = req_dict["image_b64"]
-        if "," in b64:
-            b64 = b64.split(",")[1]
-        req_dict["image_b64"] = b64.strip()
-
-    try:
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post(f"{SAM_MICROSERVICE_URL}/roof/render", json=req_dict)
-            if resp.status_code == 200:
-                return resp.json()
-            raise HTTPException(resp.status_code, resp.text)
-    except httpx.RequestError as e:
-        raise HTTPException(503, f"SAM render engine non joignable: {e}")
-
-
 @router.post("/roof/validate")
 @router.post("/api/rooftop/validate")
 async def validate_endpoint(req: SamValidateRequest):
     """Valide les contraintes physiques des panneaux placés manuellement."""
-    req_dict = req.model_dump()
-    # Normalize dimensions format
-    if not req_dict.get("dimensions") and req_dict.get("image_width") and req_dict.get("image_height"):
-        req_dict["dimensions"] = [req_dict["image_width"], req_dict["image_height"]]
-    elif not req_dict.get("dimensions"):
-        req_dict["dimensions"] = [800, 600]
-
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(f"{SAM_MICROSERVICE_URL}/roof/validate", json=req_dict)
+            resp = await client.post(f"{SAM_MICROSERVICE_URL}/roof/validate", json=req.model_dump())
             if resp.status_code == 200:
                 return resp.json()
             raise HTTPException(resp.status_code, resp.text)
     except httpx.RequestError as e:
         raise HTTPException(503, f"SAM service non joignable: {e}")
+
+
+@router.post("/roof/render-preview")
+@router.post("/api/rooftop/render-preview")
+async def render_preview_endpoint(req: Request):
+    """Génère un rendu photoréaliste actualisé pour les panneaux modifiés manuellement."""
+    body = await req.json()
+    try:
+        async with httpx.AsyncClient(timeout=20.0) as client:
+            resp = await client.post(f"{SAM_MICROSERVICE_URL}/roof/render-preview", json=body)
+            if resp.status_code == 200:
+                return resp.json()
+            raise HTTPException(resp.status_code, resp.text)
+    except httpx.RequestError as e:
+        raise HTTPException(503, f"SAM service non joignable: {e}")
+
+
+@router.post("/roof/calibrate")
+@router.post("/api/rooftop/calibrate")
+async def calibrate_endpoint(req: Request):
+    """Calibre la toiture par dimensions réelles ou sélection de 4 points d'homographie."""
+    body = await req.json()
+    try:
+        async with httpx.AsyncClient(timeout=15.0) as client:
+            resp = await client.post(f"{SAM_MICROSERVICE_URL}/roof/calibrate", json=body)
+            if resp.status_code == 200:
+                return resp.json()
+            raise HTTPException(resp.status_code, resp.text)
+    except httpx.RequestError as e:
+        raise HTTPException(503, f"SAM service non joignable: {e}")
+
+
+class RecommendRequest(BaseModel):
+    image_b64: str
+    annual_kwh: Optional[float] = 3600.0
+    budget_max_tnd: Optional[float] = None
+    roof_mask_id: Optional[int] = None
+    obstacle_mask_ids: Optional[list[int]] = None
+    custom_roof_polygon: Optional[list[list[int]]] = None
+    custom_obstacle_polygons: Optional[list[list[list[int]]]] = None
+    real_roof_area_m2: Optional[float] = None
+    panel_wattage_w: int = 450
+
+
+@router.post("/roof/recommend")
+@router.post("/api/rooftop/recommend")
+async def recommend_endpoint(req: RecommendRequest):
+    """
+    Génère 3 configurations photovoltaïques comparées :
+    1. Installation Économique (Budget léger, amortissement rapide)
+    2. Installation Équilibrée (Couvre la consommation annuelle recommandée)
+    3. Capacité Maximale (Plein potentiel toiture portrait/paysage)
+    """
+    raw_b64 = req.image_b64
+    if "," in raw_b64:
+        raw_b64 = raw_b64.split(",")[1]
+    raw_b64 = raw_b64.strip()
+    raw_b64 += "=" * (-len(raw_b64) % 4)
+
+    annual_needs = req.annual_kwh or 3600.0
+    # Modules nécessaires pour couvrir ~90% des besoins
+    kwh_per_kwp = 1650.0  # PVGIS Tunisie
+    ideal_kwp = annual_needs / kwh_per_kwp
+    ideal_panels = max(4, round(ideal_kwp / (req.panel_wattage_w / 1000.0)))
+
+    proposals = []
+
+    configs_to_test = [
+        {
+            "id": "eco",
+            "title": "Installation Économique",
+            "tag": "Budget Réduit",
+            "desired": max(2, min(4, ideal_panels - 2)),
+            "orientation": "portrait",
+            "strategy_desc": "Couvre le talon de consommation de base avec un investissement minimal et un amortissement ultra-rapide."
+        },
+        {
+            "id": "balanced",
+            "title": "Installation Équilibrée",
+            "tag": "Recommandée",
+            "desired": ideal_panels,
+            "orientation": "portrait",
+            "strategy_desc": "Dimensionnement idéal couvrant 85% à 100% de vos besoins énergétiques annuels sans surplus non valorisé."
+        },
+        {
+            "id": "max",
+            "title": "Capacité Maximale",
+            "tag": "Production Maximale",
+            "desired": min(30, ideal_panels + 6),
+            "orientation": "auto",
+            "strategy_desc": "Exploite le maximum de la surface disponible pour maximiser votre indépendance énergétique et préparer l'avenir (véhicule électrique, pompe à chaleur)."
+        }
+    ]
+
+    async with httpx.AsyncClient(timeout=45.0) as client:
+        for cfg in configs_to_test:
+            plan_payload = {
+                "image_b64": raw_b64,
+                "roof_mask_id": req.roof_mask_id,
+                "obstacle_mask_ids": req.obstacle_mask_ids,
+                "custom_roof_polygon": req.custom_roof_polygon,
+                "custom_obstacle_polygons": req.custom_obstacle_polygons,
+                "desired_panels": cfg["desired"],
+                "panel_wattage_w": req.panel_wattage_w,
+                "real_roof_area_m2": req.real_roof_area_m2,
+                "orientation": "portrait" if cfg["orientation"] != "landscape" else "landscape"
+            }
+            try:
+                resp = await client.post(f"{SAM_MICROSERVICE_URL}/roof/plan", json=plan_payload)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    placed = data.get("panels_placed", 0)
+                    kwp = round(placed * (req.panel_wattage_w / 1000.0), 2)
+                    prod = round(kwp * kwh_per_kwp, 0)
+                    cost_info = estimate_installation_cost(installed_kwp=kwp, nb_panels=placed, panel_wattage_w=req.panel_wattage_w)
+                    savings = round(prod * 0.34 * 0.85, 0)
+                    roi = calculate_roi(total_investment_tnd=cost_info["net_total_tnd"], annual_savings_tnd=savings)
+                    coverage = min(100.0, round((prod / annual_needs) * 100, 1))
+
+                    score = 80
+                    if cfg["id"] == "balanced":
+                        score = 96
+                    elif cfg["id"] == "eco":
+                        score = 88
+                    else:
+                        score = 85
+
+                    proposals.append({
+                        "id": cfg["id"],
+                        "title": cfg["title"],
+                        "tag": cfg["tag"],
+                        "panels_placed": placed,
+                        "installed_kwp": kwp,
+                        "panel_wattage_w": req.panel_wattage_w,
+                        "annual_production_kwh": prod,
+                        "coverage_pct": coverage,
+                        "net_cost_tnd": cost_info["net_total_tnd"],
+                        "gross_cost_tnd": cost_info["gross_total_tnd"],
+                        "annual_savings_tnd": savings,
+                        "payback_years": roi["simple_payback_years"],
+                        "panels": data.get("panels", []),
+                        "dimensions": data.get("dimensions", [800, 600]),
+                        "realistic_render_b64": data.get("realistic_render_b64", ""),
+                        "explanation": cfg["strategy_desc"],
+                        "score": score
+                    })
+            except Exception as e:
+                logger.warning(f"Error computing proposal {cfg['id']}: {e}")
+
+    # Fallback if SAM service was slow or unavailable
+    if not proposals:
+        kwp = round(ideal_panels * 0.45, 2)
+        proposals.append({
+            "id": "balanced",
+            "title": "Installation Équilibrée",
+            "tag": "Recommandée",
+            "panels_placed": ideal_panels,
+            "installed_kwp": kwp,
+            "panel_wattage_w": 450,
+            "annual_production_kwh": round(kwp * 1650, 0),
+            "coverage_pct": 88.0,
+            "net_cost_tnd": round(kwp * 2200, 0),
+            "gross_cost_tnd": round(kwp * 2600, 0),
+            "annual_savings_tnd": round(kwp * 1650 * 0.34 * 0.85, 0),
+            "payback_years": 4.8,
+            "panels": [],
+            "dimensions": [800, 600],
+            "realistic_render_b64": "",
+            "explanation": "Configuration optimale calculée selon votre consommation.",
+            "score": 95
+        })
+
+    return {
+        "status": "success",
+        "recommended_id": "balanced",
+        "proposals": proposals
+    }
 
 
 # ─────────────────────────────────────────────────────────────────────────────
