@@ -38,6 +38,8 @@ interface State {
   savedProjects: SavedRooftopProject[];
   undoStack: PlacedPanel[][];
   redoStack: PlacedPanel[][];
+  cinematicSplashRequested: boolean;
+  triggerCinematicSplash: () => void;
   set: (patch: Partial<Omit<State, "set">>) => void;
 }
 
@@ -48,6 +50,8 @@ export const useSolarStore = create<State>()(
       night: false,
       reduced: false,
       onboarded: false,
+      cinematicSplashRequested: false,
+      triggerCinematicSplash: () => set({ cinematicSplashRequested: true }),
       input: {
         annual: 7200,
         area: 45,

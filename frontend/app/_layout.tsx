@@ -4,11 +4,21 @@ import { GestureHandlerRootView } from "react-native-gesture-handler";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { StatusBar } from "expo-status-bar";
 import { BrandSplash } from "../components/BrandSplash";
+import { useSolarStore } from "../store/useSolarStore";
 import { theme } from "../theme";
 
 export default function Layout() {
-  const [splash, setSplash] = useState(true);
-  const done = useCallback(() => setSplash(false), []);
+  const [initialSplash, setInitialSplash] = useState(true);
+  const cinematicRequested = useSolarStore((s) => s.cinematicSplashRequested);
+  const setStore = useSolarStore((s) => s.set);
+
+  const done = useCallback(() => {
+    setInitialSplash(false);
+    setStore({ cinematicSplashRequested: false });
+  }, [setStore]);
+
+  const showSplash = initialSplash || cinematicRequested;
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
@@ -20,7 +30,9 @@ export default function Layout() {
             contentStyle: { backgroundColor: theme.colors.bg },
           }}
         />
-        {splash && <BrandSplash onDone={done} />}
+        {showSplash && (
+          <BrandSplash onDone={done} forceFull={cinematicRequested} />
+        )}
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

@@ -21,6 +21,7 @@ import * as Haptics from "expo-haptics";
 import { useMotion } from "../hooks/useMotion";
 import { theme } from "../theme";
 import { RangeControl } from "./RangeControl";
+import { useSolarStore } from "../store/useSolarStore";
 
 export const colors = theme.colors;
 
@@ -36,9 +37,16 @@ export function Copy({ children }: { children: React.ReactNode }) {
   return <Text style={s.copy}>{children}</Text>;
 }
 
-export function Logo() {
+export function Logo({ onPress }: { onPress?: () => void } = {}) {
+  const trigger = useSolarStore((state) => state.triggerCinematicSplash);
+  const handlePress = onPress ?? trigger;
   return (
-    <View style={s.row}>
+    <Pressable
+      onPress={handlePress}
+      accessibilityRole="button"
+      accessibilityLabel="Smart Solar - Rejouer l'introduction cinématographique"
+      style={({ pressed }) => [s.row, { opacity: pressed ? 0.75 : 1 }]}
+    >
       <View style={s.logo}>
         <Sun size={22} color="#FFFFFF" strokeWidth={2.4} />
       </View>
@@ -53,7 +61,7 @@ export function Logo() {
         smart<Text style={{ fontWeight: "400", color: colors.ink }}>solar</Text>
         <Text style={{ color: colors.gold, fontWeight: "900" }}>°</Text>
       </Text>
-    </View>
+    </Pressable>
   );
 }
 

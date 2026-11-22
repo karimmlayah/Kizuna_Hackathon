@@ -3,6 +3,7 @@ import React, {
   useRef,
   useState,
   useEffect,
+  useMemo,
   Component,
   type ReactNode,
 } from "react";
@@ -14,6 +15,31 @@ import Fallback from "./SolarScene.native";
 import { useMotion } from "../hooks/useMotion";
 import type { SceneProps } from "./SolarScene.types";
 import type { Equipment } from "../types";
+
+// Static shared unit box geometry to eliminate GPU memory churn
+const UNIT_BOX_GEO = new THREE.BoxGeometry(1, 1, 1);
+const SPHERE_GEO = new THREE.SphereGeometry(0.055, 8, 8);
+const TRUNK_GEO = new THREE.CylinderGeometry(0.06, 0.1, 1.1, 8);
+const FOLIAGE_GEO_1 = new THREE.IcosahedronGeometry(0.7, 2);
+const FOLIAGE_GEO_2 = new THREE.IcosahedronGeometry(1, 1);
+
+// Static energy flow paths
+const FLOW_SOLAR_POINTS = [
+  new THREE.Vector3(-0.6, 2.7, 0),
+  new THREE.Vector3(0.4, 2, 1.35),
+  new THREE.Vector3(0.4, 0.7, 1.5),
+];
+const FLOW_BATTERY_POINTS = [
+  new THREE.Vector3(0.4, 0.5, 1.5),
+  new THREE.Vector3(0.65, 0.3, 1.9),
+  new THREE.Vector3(0.95, 0.65, 1.8),
+];
+const FLOW_GRID_POINTS = [
+  new THREE.Vector3(0.4, 0.3, 1.5),
+  new THREE.Vector3(1.7, 0.14, 2.6),
+  new THREE.Vector3(3.3, 0.5, 2.45),
+];
+
 function Box({
   p,
   size,
@@ -30,6 +56,8 @@ function Box({
   return (
     <mesh
       position={p}
+      scale={size}
+      geometry={UNIT_BOX_GEO}
       castShadow
       receiveShadow
       onClick={(e) => {
@@ -39,14 +67,15 @@ function Box({
         }
       }}
     >
-      <boxGeometry args={size} />
       <meshStandardMaterial color={color} roughness={0.65} metalness={metal} />
     </mesh>
   );
 }
+
 function Controls() {
-  const { camera, gl, invalidate } = useThree();
+  const { camera, gl } = useThree();
   useEffect(() => {
+    if (!gl?.domElement) return;
     const c = new OrbitControls(camera, gl.domElement);
     c.enablePan = false;
     c.minDistance = 8;
@@ -56,17 +85,26 @@ function Controls() {
     c.minAzimuthAngle = -0.5;
     c.maxAzimuthAngle = 1.7;
     c.target.set(0, 0.5, 0);
-    c.addEventListener("change", () => invalidate());
-    c.update();
-    return () => c.dispose();
-  }, [camera, gl, invalidate]);
+    return () => {
+      try {
+        c.dispose();
+      } catch {}
+    };
+  }, [camera, gl]);
   return null;
 }
-function Framing(){
-  const {camera,size,invalidate}=useThree();
-  useEffect(()=>{camera.zoom=Math.min(1,Math.max(.65,size.width/size.height));camera.updateProjectionMatrix();invalidate();},[camera,size.width,size.height,invalidate]);
+
+function Framing() {
+  const { camera, size } = useThree();
+  useEffect(() => {
+    if (camera instanceof THREE.PerspectiveCamera) {
+      camera.zoom = Math.min(1, Math.max(0.65, size.width / Math.max(1, size.height)));
+      camera.updateProjectionMatrix();
+    }
+  }, [camera, size.width, size.height]);
   return null;
 }
+
 export function EnergyFlow({
   points,
   color,
@@ -78,20 +116,28 @@ export function EnergyFlow({
   motion: boolean;
   intensity: number;
 }) {
-  const curve = new THREE.CatmullRomCurve3(points);
+  const curve = useMemo(() => new THREE.CatmullRomCurve3(points), [points]);
+  const tubeGeo = useMemo(
+    () => new THREE.TubeGeometry(curve, 20, 0.018, 5, false),
+    [curve],
+  );
   const ref = useRef<THREE.Group>(null);
-  useFrame(({ clock }) => {
+  const tRef = useRef(0);
+
+  useFrame((_, delta) => {
     if (!motion || !ref.current) return;
-    ref.current.children.forEach((obj, i) =>
-      obj.position.copy(
-        curve.getPoint((clock.elapsedTime * 0.13 * intensity + i / 4) % 1),
-      ),
-    );
+    tRef.current = (tRef.current + delta * 0.45 * intensity) % 1;
+    const t = tRef.current;
+    const children = ref.current.children;
+    for (let i = 0; i < children.length; i++) {
+      const p = curve.getPoint((t + i / 4) % 1);
+      children[i]?.position.copy(p);
+    }
   });
+
   return (
     <group>
-      <mesh>
-        <tubeGeometry args={[curve, 24, 0.018, 5, false]} />
+      <mesh geometry={tubeGeo}>
         <meshStandardMaterial
           color={color}
           emissive={color}
@@ -100,8 +146,11 @@ export function EnergyFlow({
       </mesh>
       <group ref={ref}>
         {[0, 1, 2, 3].map((i) => (
-          <mesh key={i} position={curve.getPoint(i / 4)}>
-            <sphereGeometry args={[0.055, 8, 8]} />
+          <mesh
+            key={i}
+            position={curve.getPoint(i / 4)}
+            geometry={SPHERE_GEO}
+          >
             <meshBasicMaterial color={color} />
           </mesh>
         ))}
@@ -109,6 +158,7 @@ export function EnergyFlow({
     </group>
   );
 }
+
 function House({
   night,
   onSelect,
@@ -240,12 +290,15 @@ function House({
         [2.9, -2.2],
       ].map(([x, z], i) => (
         <group key={i} position={[x!, 0, z!]}>
-          <mesh position={[0, 0.55, 0]} castShadow>
-            <cylinderGeometry args={[0.06, 0.1, 1.1, 8]} />
+          <mesh position={[0, 0.55, 0]} geometry={TRUNK_GEO} castShadow>
             <meshStandardMaterial color="#8D8166" />
           </mesh>
-          <mesh position={[0, 1.2, 0]} castShadow scale={[0.65, 1, 0.65]}>
-            <icosahedronGeometry args={[0.7, 2]} />
+          <mesh
+            position={[0, 1.2, 0]}
+            geometry={FOLIAGE_GEO_1}
+            castShadow
+            scale={[0.65, 1, 0.65]}
+          >
             <meshStandardMaterial
               color={night ? "#1E3A2F" : (i % 2 ? "#7A9A70" : "#8BAF7F")}
               roughness={0.9}
@@ -257,39 +310,27 @@ function House({
         <mesh
           key={x}
           position={[x, 0.16, 2.8]}
+          geometry={FOLIAGE_GEO_2}
           castShadow
           scale={[0.35, 0.2, 0.3]}
         >
-          <icosahedronGeometry args={[1, 1]} />
           <meshStandardMaterial color={night ? "#1E3A2F" : "#8AA97F"} />
         </mesh>
       ))}
       <EnergyFlow
-        points={[
-          new THREE.Vector3(-0.6, 2.7, 0),
-          new THREE.Vector3(0.4, 2, 1.35),
-          new THREE.Vector3(0.4, 0.7, 1.5),
-        ]}
+        points={FLOW_SOLAR_POINTS}
         color="#FFB800"
         motion={motion}
         intensity={night ? 0.15 : intensity}
       />
       <EnergyFlow
-        points={[
-          new THREE.Vector3(0.4, 0.5, 1.5),
-          new THREE.Vector3(0.65, 0.3, 1.9),
-          new THREE.Vector3(0.95, 0.65, 1.8),
-        ]}
+        points={FLOW_BATTERY_POINTS}
         color="#10B981"
         motion={motion}
         intensity={intensity}
       />
       <EnergyFlow
-        points={[
-          new THREE.Vector3(0.4, 0.3, 1.5),
-          new THREE.Vector3(1.7, 0.14, 2.6),
-          new THREE.Vector3(3.3, 0.5, 2.45),
-        ]}
+        points={FLOW_GRID_POINTS}
         color="#38BDF8"
         motion={motion}
         intensity={intensity}
@@ -297,6 +338,7 @@ function House({
     </group>
   );
 }
+
 class Boundary extends Component<
   { children: ReactNode; fallback: ReactNode },
   { failed: boolean }
@@ -305,34 +347,49 @@ class Boundary extends Component<
   static getDerivedStateFromError() {
     return { failed: true };
   }
+  componentDidCatch(err: any) {
+    console.warn("SolarWorld WebGL render error caught by boundary:", err);
+  }
   render() {
     return this.state.failed ? this.props.fallback : this.props.children;
   }
 }
-export default function SolarWorld(props: SceneProps & {active?:boolean}) {
+
+export default function SolarWorld(props: SceneProps & { active?: boolean }) {
   const motion = useMotion();
   const [visible, setVisible] = useState(true);
   const [lost, setLost] = useState(false);
+
   useEffect(() => {
+    if (typeof document === "undefined") return;
     const fn = () => setVisible(!document.hidden);
     document.addEventListener("visibilitychange", fn);
     return () => document.removeEventListener("visibilitychange", fn);
   }, []);
+
   if (lost) return <Fallback {...props} />;
+
   return (
     <View style={{ flex: 1, minHeight: 320 }}>
       <Boundary fallback={<Fallback {...props} />}>
         <Suspense fallback={<Fallback {...props} />}>
           <Canvas
-            shadows
+            shadows="soft"
             dpr={[1, 1.5]}
-            frameloop={motion && visible && props.active!==false ? "always" : "demand"}
+            frameloop={motion && visible && props.active !== false ? "always" : "demand"}
             camera={{ position: [8, 7.5, 10], fov: 35 }}
-            gl={{ antialias: true, alpha: true }}
+            gl={{
+              antialias: true,
+              alpha: true,
+              powerPreference: "high-performance",
+            }}
             onCreated={({ gl }) => {
               gl.domElement.addEventListener(
                 "webglcontextlost",
-                () => setLost(true),
+                (e) => {
+                  e.preventDefault();
+                  setLost(true);
+                },
                 { once: true },
               );
             }}
@@ -343,13 +400,14 @@ export default function SolarWorld(props: SceneProps & {active?:boolean}) {
               intensity={props.night ? 1.2 : 3.5}
               color={props.night ? "#7EA8D6" : "#FFF5E0"}
               castShadow
-              shadow-mapSize={[1024, 1024]}
+              shadow-mapSize-width={1024}
+              shadow-mapSize-height={1024}
               shadow-camera-left={-6}
               shadow-camera-right={6}
               shadow-camera-top={6}
               shadow-camera-bottom={-6}
             />
-            <House {...props} motion={motion && visible && props.active!==false} />
+            <House {...props} motion={motion && visible && props.active !== false} />
             <Controls />
             <Framing />
           </Canvas>
